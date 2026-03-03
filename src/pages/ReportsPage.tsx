@@ -52,7 +52,7 @@ const ReportsPage = () => {
             <div className="grid sm:grid-cols-3 gap-4 mb-6">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl border border-border p-5 text-center">
                 <p className="text-3xl font-bold text-primary">{totalRevenue.toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground">إجمالي الإيرادات (ر.س)</p>
+                <p className="text-sm text-muted-foreground">إجمالي الإيرادات (ج.م)</p>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl border border-border p-5 text-center">
                 <p className="text-3xl font-bold text-foreground">{sales.length}</p>
@@ -60,7 +60,7 @@ const ReportsPage = () => {
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl border border-border p-5 text-center">
                 <p className="text-3xl font-bold text-foreground">{(totalRevenue / sales.length).toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground">متوسط قيمة البيع (ر.س)</p>
+                <p className="text-sm text-muted-foreground">متوسط قيمة البيع (ج.م)</p>
               </motion.div>
             </div>
 
@@ -88,7 +88,7 @@ const ReportsPage = () => {
                         <p className="text-sm font-medium text-foreground">{p.name}</p>
                         <p className="text-xs text-muted-foreground">{p.qty} وحدة مباعة</p>
                       </div>
-                      <span className="text-primary font-bold">{p.revenue.toFixed(2)} ر.س</span>
+                      <span className="text-primary font-bold">{p.revenue.toFixed(2)} ج.م</span>
                     </div>
                   ))}
                 </div>
@@ -116,7 +116,7 @@ const ReportsPage = () => {
                     {sales.slice(0, 20).map(sale => (
                       <tr key={sale.id} className="border-t border-border">
                         <td className="p-3 text-sm font-mono text-foreground">{sale.receiptNumber}</td>
-                        <td className="p-3 text-sm font-bold text-primary">{sale.total.toFixed(2)} ر.س</td>
+                        <td className="p-3 text-sm font-bold text-primary">{sale.total.toFixed(2)} ج.م</td>
                         <td className="p-3 text-sm text-muted-foreground">
                           {sale.paymentMethod === 'cash' ? 'نقداً' : sale.paymentMethod === 'card' ? 'بطاقة' : 'إلكتروني'}
                         </td>

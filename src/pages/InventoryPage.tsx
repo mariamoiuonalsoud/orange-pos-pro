@@ -127,7 +127,7 @@ const InventoryPage = () => {
                       {editing?.id === product.id ? (
                         <Input type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: parseFloat(e.target.value) || 0 })} className="h-8 w-24" />
                       ) : (
-                        <span className="text-sm font-bold text-primary">{product.price.toFixed(2)} ر.س</span>
+                        <span className="text-sm font-bold text-primary">{product.price.toFixed(2)} ج.م</span>
                       )}
                     </td>
                     <td className="p-3">
