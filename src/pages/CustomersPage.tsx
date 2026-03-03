@@ -58,7 +58,7 @@ const CustomersPage = () => {
                 )}
                 <div className="pt-2 border-t border-border">
                   <p className="text-muted-foreground">
-                    إجمالي المشتريات: <span className="text-primary font-bold">{customer.totalPurchases.toFixed(2)} ر.س</span>
+                    إجمالي المشتريات: <span className="text-primary font-bold">{customer.totalPurchases.toFixed(2)} ج.م</span>
                   </p>
                 </div>
               </div>

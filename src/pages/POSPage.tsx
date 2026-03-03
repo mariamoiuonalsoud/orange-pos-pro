@@ -75,7 +75,7 @@ const POSPage = () => {
                     <h3 className="text-sm font-semibold text-foreground line-clamp-2 mb-2 leading-tight">
                       {product.name}
                     </h3>
-                    <p className="text-primary font-bold text-lg">{product.price.toFixed(2)} ر.س</p>
+                    <p className="text-primary font-bold text-lg">{product.price.toFixed(2)} ج.م</p>
                     <p className={`text-xs mt-1 ${product.stock < 10 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
                       المخزون: {product.stock}
                     </p>

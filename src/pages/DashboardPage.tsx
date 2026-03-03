@@ -23,9 +23,9 @@ const DashboardPage = () => {
   const COLORS = ['hsl(27, 95%, 55%)', 'hsl(20, 90%, 45%)', 'hsl(35, 90%, 60%)', 'hsl(0, 0%, 20%)', 'hsl(142, 72%, 42%)', 'hsl(0, 84%, 60%)'];
 
   const stats = [
-    { label: 'إجمالي الإيرادات', value: `${totalRevenue.toFixed(2)} ر.س`, icon: DollarSign, color: 'bg-primary' },
+    { label: 'إجمالي الإيرادات', value: `${totalRevenue.toFixed(2)} ج.م`, icon: DollarSign, color: 'bg-primary' },
     { label: 'عدد المبيعات', value: totalSales.toString(), icon: ShoppingCart, color: 'bg-success' },
-    { label: 'متوسط البيع', value: `${avgSale.toFixed(2)} ر.س`, icon: TrendingUp, color: 'bg-accent' },
+    { label: 'متوسط البيع', value: `${avgSale.toFixed(2)} ج.م`, icon: TrendingUp, color: 'bg-accent' },
     { label: 'منتجات منخفضة المخزون', value: lowStockProducts.length.toString(), icon: AlertTriangle, color: 'bg-destructive' },
   ];
 

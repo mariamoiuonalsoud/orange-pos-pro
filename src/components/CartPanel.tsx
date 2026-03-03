@@ -75,7 +75,7 @@ const CartPanel = () => {
                 <span className="text-2xl">{item.image}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
-                  <p className="text-primary font-bold text-sm">{(item.price * item.quantity).toFixed(2)} ر.س</p>
+                  <p className="text-primary font-bold text-sm">{(item.price * item.quantity).toFixed(2)} ج.م</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <motion.button
@@ -105,15 +105,15 @@ const CartPanel = () => {
         <div className="border-t border-border p-4 space-y-3">
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>المجموع الفرعي</span>
-            <span>{cartTotal.toFixed(2)} ر.س</span>
+            <span>{cartTotal.toFixed(2)} ج.م</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>ضريبة القيمة المضافة (15%)</span>
-            <span>{tax.toFixed(2)} ر.س</span>
+            <span>{tax.toFixed(2)} ج.م</span>
           </div>
           <div className="flex justify-between text-lg font-bold text-foreground border-t border-border pt-2">
             <span>الإجمالي</span>
-            <span className="text-primary">{grandTotal.toFixed(2)} ر.س</span>
+            <span className="text-primary">{grandTotal.toFixed(2)} ج.م</span>
           </div>
 
           <AnimatePresence mode="wait">
@@ -193,7 +193,7 @@ const CartPanel = () => {
               <img src={logo} alt="Orange Group" className="w-16 h-16 mx-auto mb-3 object-contain" />
               <h3 className="text-xl font-bold text-foreground mb-2">تمت العملية بنجاح!</h3>
               <p className="text-muted-foreground">رقم الإيصال: {lastReceipt}</p>
-              <p className="text-primary font-bold text-lg mt-2">{grandTotal.toFixed(2)} ر.س</p>
+              <p className="text-primary font-bold text-lg mt-2">{grandTotal.toFixed(2)} ج.م</p>
             </motion.div>
           </motion.div>
         )}
