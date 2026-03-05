@@ -11,14 +11,22 @@ import DashboardPage from "./pages/DashboardPage";
 import InventoryPage from "./pages/InventoryPage";
 import CustomersPage from "./pages/CustomersPage";
 import ReportsPage from "./pages/ReportsPage";
+import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
+const ProtectedRoute = ({
+  children,
+  adminOnly = false,
+}: {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+}) => {
   const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (adminOnly && user?.role !== 'admin') return <Navigate to="/pos" replace />;
+  if (adminOnly && user?.role !== "admin")
+    return <Navigate to="/pos" replace />;
   return <>{children}</>;
 };
 
@@ -27,12 +35,63 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/pos" replace /> : <LoginPage />} />
-      <Route path="/pos" element={<ProtectedRoute><POSPage /></ProtectedRoute>} />
-      <Route path="/dashboard" element={<ProtectedRoute adminOnly><DashboardPage /></ProtectedRoute>} />
-      <Route path="/inventory" element={<ProtectedRoute adminOnly><InventoryPage /></ProtectedRoute>} />
-      <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute adminOnly><ReportsPage /></ProtectedRoute>} />
+      <Route
+        path="/login"
+        element={
+          isAuthenticated ? <Navigate to="/pos" replace /> : <LoginPage />
+        }
+      />
+      <Route
+        path="/pos"
+        element={
+          <ProtectedRoute>
+            <POSPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute adminOnly>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute adminOnly>
+            <InventoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/customers"
+        element={
+          <ProtectedRoute>
+            <CustomersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute adminOnly>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* 2. ضفنا المسار بتاع إدارة الموظفين ومحمي للأدمن فقط */}
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute adminOnly>
+            <UsersPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route path="/" element={<Navigate to="/pos" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
