@@ -47,7 +47,7 @@ Orange POS Pro is a modern, high-performance Point of Sale (POS) solution tailor
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Getting Started
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18.0.0 or higher)
