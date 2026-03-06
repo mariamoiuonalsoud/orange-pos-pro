@@ -1,226 +1,113 @@
 import React from "react";
 import { usePOS } from "@/contexts/POSContext";
 import POSHeader from "@/components/POSHeader";
-import { motion } from "framer-motion";
-import { BarChart3, Receipt, Calendar } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { Receipt, CreditCard, Users, Calendar, Banknote } from "lucide-react";
 
 const ReportsPage = () => {
-  const { sales, products } = usePOS();
+  const { sales } = usePOS();
 
-  const totalRevenue = sales.reduce((sum, s) => sum + s.total, 0);
-  const paymentBreakdown = {
-    cash: sales
-      .filter((s) => s.paymentMethod === "cash")
-      .reduce((sum, s) => sum + s.total, 0),
-    card: sales
-      .filter((s) => s.paymentMethod === "card")
-      .reduce((sum, s) => sum + s.total, 0),
-    mobile: sales
-      .filter((s) => s.paymentMethod === "mobile")
-      .reduce((sum, s) => sum + s.total, 0),
-  };
+  // إجمالي المبيعات (كل الفلوس بالضريبة)
+  const totalSalesAmount = sales.reduce((sum, s) => sum + s.total, 0);
 
-  const paymentData = [
-    { name: "نقداً", value: paymentBreakdown.cash },
-    { name: "بطاقة", value: paymentBreakdown.card },
-    { name: "إلكتروني", value: paymentBreakdown.mobile },
-  ];
-
-  // Top selling from sales
-  const productSales: Record<
-    string,
-    { name: string; qty: number; revenue: number }
-  > = {};
-  sales.forEach((sale) => {
-    sale.items.forEach((item) => {
-      if (!productSales[item.id])
-        productSales[item.id] = { name: item.name, qty: 0, revenue: 0 };
-      productSales[item.id].qty += item.quantity;
-      productSales[item.id].revenue += item.price * item.quantity;
-    });
-  });
-  const topProducts = Object.values(productSales)
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
+  // إجمالي الدخل (الفلوس بدون الضريبة - كمثال أولي)
+  const totalRevenueBase = totalSalesAmount / 1.15;
 
   return (
     <div className="min-h-screen bg-background">
       <POSHeader />
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-primary" /> التقارير والإحصائيات
+      <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Receipt className="w-6 h-6 text-primary" /> تقارير المبيعات والمشترين
         </h1>
 
-        {sales.length === 0 ? (
-          <div className="text-center py-20">
-            <Receipt className="w-20 h-20 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="text-lg text-muted-foreground">
-              لا توجد مبيعات مسجلة بعد
-            </p>
-            <p className="text-sm text-muted-foreground">
-              قم بإتمام عمليات بيع لرؤية التقارير
-            </p>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <div className="bg-orange-500 text-white p-5 rounded-xl shadow-md flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold opacity-80 uppercase">
+                إجمالي المبيعات (بالضريبة)
+              </p>
+              <h3 className="text-2xl font-black">
+                {totalSalesAmount.toFixed(2)} ج.م
+              </h3>
+            </div>
+            <Banknote className="w-10 h-10 opacity-30" />
           </div>
-        ) : (
-          <>
-            {/* Summary */}
-            <div className="grid sm:grid-cols-3 gap-4 mb-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-card rounded-xl border border-border p-5 text-center"
-              >
-                <p className="text-3xl font-bold text-primary">
-                  {totalRevenue.toFixed(2)}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  إجمالي الإيرادات (ج.م)
-                </p>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-card rounded-xl border border-border p-5 text-center"
-              >
-                <p className="text-3xl font-bold text-foreground">
-                  {sales.length}
-                </p>
-                <p className="text-sm text-muted-foreground">عدد العمليات</p>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-card rounded-xl border border-border p-5 text-center"
-              >
-                <p className="text-3xl font-bold text-foreground">
-                  {(totalRevenue / sales.length).toFixed(2)}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  متوسط قيمة البيع (ج.م)
-                </p>
-              </motion.div>
+
+          <div className="bg-card p-5 rounded-xl border border-border shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-bold uppercase">
+                إجمالي الدخل (الصافي)
+              </p>
+              <h3 className="text-2xl font-black">
+                {totalRevenueBase.toFixed(2)} ج.م
+              </h3>
             </div>
+            <CreditCard className="w-10 h-10 text-muted-foreground opacity-20" />
+          </div>
 
-            {/* Charts */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              <div className="bg-card rounded-xl border border-border p-6">
-                <h2 className="text-lg font-bold text-foreground mb-4">
-                  حسب طريقة الدفع
-                </h2>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={paymentData}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="hsl(var(--border))"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      stroke="hsl(var(--muted-foreground))"
-                    />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip />
-                    <Bar
-                      dataKey="value"
-                      fill="hsl(27, 95%, 55%)"
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          <div className="bg-card p-5 rounded-xl border border-border shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-bold uppercase">
+                عدد الفواتير
+              </p>
+              <h3 className="text-2xl font-black">{sales.length} فاتورة</h3>
+            </div>
+            <Users className="w-10 h-10 text-muted-foreground opacity-20" />
+          </div>
+        </div>
 
-              <div className="bg-card rounded-xl border border-border p-6">
-                <h2 className="text-lg font-bold text-foreground mb-4">
-                  المنتجات الأكثر مبيعاً
-                </h2>
-                <div className="space-y-3">
-                  {topProducts.map((p, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {p.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.qty} وحدة مباعة
-                        </p>
+        {/* سجل الفواتير */}
+        <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+          <div className="p-4 border-b bg-muted/30">
+            <h2 className="font-bold flex items-center gap-2 text-sm">
+              <Calendar className="w-4 h-4" /> مراجعة فواتير المشترين
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm">
+              <thead className="bg-muted/50 font-bold">
+                <tr>
+                  <th className="p-4">رقم الفاتورة</th>
+                  <th className="p-4">المشتري</th>
+                  <th className="p-4">إجمالي الفاتورة</th>
+                  <th className="p-4">طريقة الدفع</th>
+                  <th className="p-4">التاريخ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.map((sale) => (
+                  <tr
+                    key={sale.id}
+                    className="border-t border-border hover:bg-muted/10 transition-colors"
+                  >
+                    <td className="p-4 font-mono font-bold text-xs">
+                      {sale.receiptNumber}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-bold">
+                        {sale.customerName || "عميل نقدي"}
                       </div>
-                      <span className="text-primary font-bold">
-                        {p.revenue.toFixed(2)} ج.م
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Recent sales */}
-            <div className="mt-6 bg-card rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" /> آخر العمليات
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="text-right p-3 text-sm font-semibold text-foreground">
-                        رقم الإيصال
-                      </th>
-                      <th className="text-right p-3 text-sm font-semibold text-foreground">
-                        المبلغ
-                      </th>
-                      <th className="text-right p-3 text-sm font-semibold text-foreground">
-                        الدفع
-                      </th>
-                      <th className="text-right p-3 text-sm font-semibold text-foreground">
-                        التاريخ
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales.slice(0, 20).map((sale) => (
-                      <tr key={sale.id} className="border-t border-border">
-                        <td className="p-3 text-sm font-mono text-foreground">
-                          {sale.receiptNumber}
-                        </td>
-                        <td className="p-3 text-sm font-bold text-primary">
-                          {sale.total.toFixed(2)} ج.م
-                        </td>
-                        <td className="p-3 text-sm text-muted-foreground">
-                          {sale.paymentMethod === "cash"
-                            ? "نقداً"
-                            : sale.paymentMethod === "card"
-                              ? "بطاقة"
-                              : "إلكتروني"}
-                        </td>
-                        <td
-                          className="p-3 text-sm text-muted-foreground"
-                          dir="ltr"
-                        >
-                          {new Date(sale.date).toLocaleString("ar-SA")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
+                      <div className="text-[10px] text-muted-foreground">
+                        {sale.customerPhone || "بدون هاتف"}
+                      </div>
+                    </td>
+                    <td className="p-4 font-bold text-primary">
+                      {sale.total.toFixed(2)} ج.م
+                    </td>
+                    <td className="p-4 text-xs font-bold text-muted-foreground">
+                      {sale.paymentMethod === "cash"
+                        ? "نقداً"
+                        : "بطاقة / محفظة"}
+                    </td>
+                    <td className="p-4 text-[10px]">
+                      {new Date(sale.date).toLocaleString("ar-EG")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
