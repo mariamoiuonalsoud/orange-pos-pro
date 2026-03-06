@@ -56,13 +56,13 @@ Orange POS Pro is a modern, high-performance Point of Sale (POS) solution tailor
 
 
 ## 📂 Architecture
+```text
 src/
 ├── components/      # Reusable UI Modules (Receipts, Charts, Cart)
 ├── contexts/        # Core Engine (Auth Logic & Global POS State)
 ├── data/            # Business Models & Product Definitions
-├── pages/           # Application Views (POS, Dashboard, Reports, Users)
+├── pages/           # Application Views (POS, Dashboard, Inventory, Customers, Reports, Users)
 └── lib/             # Utility Functions & Configuration
-
 
 ## 👤 Author
 **Mariam** Full-Stack Developer specializing in Retail Architecture and Financial Solutions.
