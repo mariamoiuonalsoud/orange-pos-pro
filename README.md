@@ -63,6 +63,7 @@ src/
 ├── data/            # Business Models & Product Definitions
 ├── pages/           # Application Views (POS, Dashboard, Inventory, Customers, Reports, Users)
 └── lib/             # Utility Functions & Configuration
+```
 
 ## 👤 Author
 **Mariam** Full-Stack Developer specializing in Retail Architecture and Financial Solutions.
