@@ -1,4 +1,4 @@
-# 🍊 Orange POS Pro
+# 🍊 Orange Group POS System
 **Enterprise-Grade Point of Sale & Inventory Management System**
 
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
