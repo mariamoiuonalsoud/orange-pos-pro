@@ -1,5 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster as Sonner } from "@/components/ui/sonner"; // دي المكتبة اللي بنستخدمها للـ Toasts
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -81,8 +81,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* 2. ضفنا المسار بتاع إدارة الموظفين ومحمي للأدمن فقط */}
       <Route
         path="/users"
         element={
@@ -91,7 +89,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
       <Route path="/" element={<Navigate to="/pos" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -102,7 +99,22 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      {/* التعديل هنا: Sonner Toaster مخصص للفت الانتباه */}
+      <Sonner
+        position="top-center"
+        richColors
+        closeButton
+        theme="light"
+        toastOptions={{
+          style: {
+            padding: "16px",
+            fontSize: "16px",
+            fontWeight: "bold",
+            border: "2px solid transparent",
+          },
+          className: "sonner-toast-custom",
+        }}
+      />
       <AuthProvider>
         <POSProvider>
           <BrowserRouter>

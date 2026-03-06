@@ -1,107 +1,197 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { CartItem, Product, Sale, DEMO_PRODUCTS } from '@/data/pos-data';
-import { toast } from 'sonner';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useCallback,
+  useEffect,
+} from "react";
+import { CartItem, Product, Sale, DEMO_PRODUCTS } from "@/data/pos-data";
+import { toast } from "sonner";
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+}
+
+export interface SaleWithCustomer extends Sale {
+  customerPhone?: string;
+  customerName?: string;
+  amountPaid?: number;
+  changeDue?: number;
+}
 
 interface POSContextType {
   products: Product[];
   cart: CartItem[];
+  customers: Customer[];
+  sales: SaleWithCustomer[];
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   cartTotal: number;
   cartCount: number;
-  completeSale: (paymentMethod: 'cash' | 'card' | 'mobile', cashierId: string) => Sale;
-  sales: Sale[];
+  findCustomerByPhone: (phone: string) => Customer | undefined;
+  completeSale: (
+    paymentMethod: "cash" | "card" | "mobile",
+    cashierId: string,
+    customerPhone: string,
+    customerName: string,
+    amountPaid?: number,
+    changeDue?: number,
+  ) => SaleWithCustomer;
   updateProduct: (product: Product) => void;
-  addProduct: (product: Omit<Product, 'id'>) => void;
+  addProduct: (product: Omit<Product, "id">) => void;
   deleteProduct: (productId: string) => void;
 }
 
 const POSContext = createContext<POSContextType | null>(null);
 
 export const POSProvider = ({ children }: { children: ReactNode }) => {
-  const [products, setProducts] = useState<Product[]>(DEMO_PRODUCTS);
+  // Persistence using LocalStorage
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem("pos_products");
+    return saved ? JSON.parse(saved) : DEMO_PRODUCTS;
+  });
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem("pos_customers");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [sales, setSales] = useState<SaleWithCustomer[]>(() => {
+    const saved = localStorage.getItem("pos_sales");
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem("pos_products", JSON.stringify(products));
+    localStorage.setItem("pos_customers", JSON.stringify(customers));
+    localStorage.setItem("pos_sales", JSON.stringify(sales));
+  }, [products, customers, sales]);
 
   const addToCart = useCallback((product: Product) => {
     if (product.stock <= 0) {
-      toast.error('المنتج غير متوفر في المخزون');
+      toast.error("المنتج نفذ من المخزن");
       return;
     }
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         if (existing.quantity >= product.stock) {
-          toast.error('الكمية المطلوبة غير متوفرة');
+          toast.error("لا توجد كمية كافية في المخزن");
           return prev;
         }
-        return prev.map(item =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        return prev.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
         );
       }
       return [...prev, { ...product, quantity: 1 }];
     });
   }, []);
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
-  }, []);
+  const removeFromCart = (productId: string) =>
+    setCart((prev) => prev.filter((i) => i.id !== productId));
 
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
+  const updateQuantity = (productId: string, quantity: number) => {
     if (quantity <= 0) {
-      setCart(prev => prev.filter(item => item.id !== productId));
+      removeFromCart(productId);
     } else {
-      setCart(prev => prev.map(item =>
-        item.id === productId ? { ...item, quantity } : item
-      ));
+      setCart((prev) =>
+        prev.map((item) =>
+          item.id === productId ? { ...item, quantity } : item,
+        ),
+      );
     }
-  }, []);
+  };
 
-  const clearCart = useCallback(() => setCart([]), []);
-
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const clearCart = () => setCart([]);
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0,
+  );
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const completeSale = useCallback((paymentMethod: 'cash' | 'card' | 'mobile', cashierId: string): Sale => {
-    const sale: Sale = {
+  const findCustomerByPhone = (phone: string) =>
+    customers.find((c) => c.phone === phone);
+
+  const completeSale = (
+    paymentMethod: "cash" | "card" | "mobile",
+    cashierId: string,
+    customerPhone: string,
+    customerName: string,
+    amountPaid: number = 0,
+    changeDue: number = 0,
+  ) => {
+    // Register customer if new
+    if (!findCustomerByPhone(customerPhone)) {
+      setCustomers((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), name: customerName, phone: customerPhone },
+      ]);
+    }
+
+    const sale: SaleWithCustomer = {
       id: crypto.randomUUID(),
+      receiptNumber: `ORG-${Date.now().toString(36).toUpperCase()}`,
       items: [...cart],
-      total: cartTotal,
+      total: cartTotal * 1.15, // Total with 15% VAT
+      date: new Date().toISOString(),
       paymentMethod,
       cashierId,
-      date: new Date().toISOString(),
-      receiptNumber: `ORG-${Date.now().toString(36).toUpperCase()}`,
+      customerPhone,
+      customerName,
+      amountPaid,
+      changeDue,
     };
-    setSales(prev => [sale, ...prev]);
+
+    setSales((prev) => [sale, ...prev]);
+
     // Deduct stock
-    setProducts(prev => prev.map(p => {
-      const cartItem = cart.find(c => c.id === p.id);
-      if (cartItem) return { ...p, stock: p.stock - cartItem.quantity };
-      return p;
-    }));
+    setProducts((prev) =>
+      prev.map((p) => {
+        const item = cart.find((c) => c.id === p.id);
+        return item ? { ...p, stock: p.stock - item.quantity } : p;
+      }),
+    );
+
     setCart([]);
     return sale;
-  }, [cart, cartTotal]);
+  };
 
-  const updateProduct = useCallback((product: Product) => {
-    setProducts(prev => prev.map(p => p.id === product.id ? product : p));
-  }, []);
-
-  const addProduct = useCallback((product: Omit<Product, 'id'>) => {
-    setProducts(prev => [...prev, { ...product, id: crypto.randomUUID() }]);
-  }, []);
-
-  const deleteProduct = useCallback((productId: string) => {
-    setProducts(prev => prev.filter(p => p.id !== productId));
-  }, []);
+  const updateProduct = (p: Product) =>
+    setProducts((prev) => prev.map((old) => (old.id === p.id ? p : old)));
+  const addProduct = (p: Omit<Product, "id">) =>
+    setProducts((prev) => [...prev, { ...p, id: crypto.randomUUID() }]);
+  const deleteProduct = (id: string) =>
+    setProducts((prev) => prev.filter((p) => p.id !== id));
 
   return (
-    <POSContext.Provider value={{
-      products, cart, addToCart, removeFromCart, updateQuantity, clearCart,
-      cartTotal, cartCount, completeSale, sales, updateProduct, addProduct, deleteProduct
-    }}>
+    <POSContext.Provider
+      value={{
+        products,
+        cart,
+        customers,
+        sales,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        clearCart,
+        cartTotal,
+        cartCount,
+        findCustomerByPhone,
+        completeSale,
+        updateProduct,
+        addProduct,
+        deleteProduct,
+      }}
+    >
       {children}
     </POSContext.Provider>
   );
@@ -109,6 +199,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
 export const usePOS = () => {
   const ctx = useContext(POSContext);
-  if (!ctx) throw new Error('usePOS must be inside POSProvider');
+  if (!ctx) throw new Error("usePOS must be inside POSProvider");
   return ctx;
 };
