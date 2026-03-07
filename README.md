@@ -1,73 +1,69 @@
-# Welcome to your Lovable project
+# 🍊 Orange Group POS System
+**Enterprise-Grade Point of Sale & Inventory Management System**
 
-## Project info
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Orange POS Pro is a modern, high-performance Point of Sale (POS) solution tailored for retail businesses. Developed using **React 18** and **TypeScript**, it provides a robust architecture for handling high-frequency transactions, inventory precision, and hardware integration.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## ✨ Core Features
 
-**Use Lovable**
+### 🛒 High-Speed Checkout (POS)
+- **Barcode Scanner Integration**: Plug-and-play support for hardware scanners with intelligent auto-focus and instant cart addition.
+- **Smart Cart Management**: Real-time 15% VAT calculation, stock validation, and interactive item adjustments.
+- **Advanced Payment Logic**: Supports Multi-method payments (Cash, Card, Wallet) with automated "Change Due" calculation to eliminate cashier errors.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 📦 Intelligent Inventory Control
+- **Live Stock Sync**: Every sale automatically deducts from the inventory in real-time.
+- **Automated Barcode Generation**: System-generated barcodes for all products with professional label printing support.
+- **Low-Stock Detection**: Visual dashboard alerts and "Pie Chart" distribution for products nearing depletion.
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📊 Professional Analytics & Reporting
+- **Business Dashboard**: Real-time visual monitoring of stock value, inventory health, and item distribution.
+- **Sales Intelligence**: Detailed transaction logs, tracking revenue, customer data, and payment trends.
+- **Financial Accounting**: Clear separation between Total Sales (Revenue) and Net Income for better profit tracking.
 
-**Use your preferred IDE**
+### 🖨️ Industry-Standard Hardware Support
+- **Receipt Printing**: Optimized for **80mm Thermal Printers** with custom CSS to ensure perfect scaling without white-space issues.
+- **Branded Output**: Professional receipt templates including store branding, cashier name, and transaction barcodes.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🛠️ Technology Stack
 
-Follow these steps:
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend Framework** | React 18 (Vite) |
+| **Language** | TypeScript (Strict Mode) |
+| **Styling** | Tailwind CSS & Shadcn UI |
+| **State Management** | React Context API |
+| **Visualizations** | Recharts (Charts/Graphs) |
+| **Animations** | Framer Motion |
+| **Notifications** | Sonner (High-visibility Toast alerts) |
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## 🚀 Getting Started
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18.0.0 or higher)
+- Hardware: (Optional) 80mm Thermal Receipt Printer & USB Barcode Scanner.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+
+
+## 📂 Architecture
+```text
+src/
+├── components/      # Reusable UI Modules (Receipts, Charts, Cart)
+├── contexts/        # Core Engine (Auth Logic & Global POS State)
+├── data/            # Business Models & Product Definitions
+├── pages/           # Application Views (POS, Dashboard, Inventory, Customers, Reports, Users)
+└── lib/             # Utility Functions & Configuration
 ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 👤 Author
+**Mariam** Full-Stack Developer specializing in Retail Architecture and Financial Solutions.
