@@ -1,17 +1,36 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth, UserRole, User } from "@/contexts/AuthContext";
 import POSHeader from "@/components/POSHeader";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, X, Save, Users, Eye } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  X,
+  Save,
+  Users,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const UsersPage = () => {
-  const { users, addUser, deleteUser, user: currentUser } = useAuth();
+  const {
+    users,
+    addUser,
+    deleteUser,
+    user: currentUser,
+    fetchUsers,
+  } = useAuth();
   const [adding, setAdding] = useState(false);
-
-  // State عشان نعرف إحنا دايسين على أي موظف عشان نعرض بياناته
   const [viewingUser, setViewingUser] = useState<User | null>(null);
+
+  // State جديدة عشان الشاشة المنبثقة بتاعة الحذف (بنشيل فيها الـ id بتاع الموظف اللي هيتحذف)
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -19,6 +38,10 @@ const UsersPage = () => {
     password: "",
     role: "cashier" as UserRole,
   });
+
+  useEffect(() => {
+    fetchUsers();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (currentUser?.role !== "admin") {
     return (
@@ -28,18 +51,32 @@ const UsersPage = () => {
     );
   }
 
-  const handleAdd = () => {
-    if (!form.name || !form.username || !form.password) return;
+  const handleAdd = async () => {
+    if (!form.name || !form.username || !form.password) {
+      toast.error("برجاء إدخال جميع البيانات");
+      return;
+    }
 
-    addUser({
+    const success = await addUser({
       name: form.name,
       username: form.username,
       password: form.password,
       role: form.role,
     });
 
-    setForm({ name: "", username: "", password: "", role: "cashier" });
-    setAdding(false);
+    if (success) {
+      setForm({ name: "", username: "", password: "", role: "cashier" });
+      setShowPassword(false);
+      setAdding(false);
+    }
+  };
+
+  // دالة الحذف الفعلية اللي هتتنفذ لما ندوس تأكيد من الشاشة المنبثقة
+  const confirmDelete = async () => {
+    if (userToDelete) {
+      await deleteUser(userToDelete);
+      setUserToDelete(null); // نقفل الشاشة بعد الحذف
+    }
   };
 
   return (
@@ -87,14 +124,27 @@ const UsersPage = () => {
                     setForm((f) => ({ ...f, username: e.target.value }))
                   }
                 />
-                <Input
-                  type="text"
-                  placeholder="الرقم السري"
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, password: e.target.value }))
-                  }
-                />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="الرقم السري"
+                    value={form.password}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, password: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
                 <select
                   value={form.role}
                   onChange={(e) =>
@@ -136,54 +186,63 @@ const UsersPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <motion.tr
-                    key={u.id}
-                    layout
-                    className="border-t border-border hover:bg-muted/50 transition-colors"
-                  >
-                    <td className="p-3 text-sm font-medium text-foreground">
-                      {u.name}
+                {users.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="text-center p-6 text-muted-foreground font-semibold"
+                    >
+                      جاري تحميل الموظفين... أو لا يوجد موظفين مسجلين حالياً.
                     </td>
-                    <td className="p-3 text-sm text-muted-foreground">
-                      {u.username}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-bold ${
-                          u.role === "admin"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
-                      >
-                        {u.role === "admin" ? "مدير نظام" : "كاشير"}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {/* زرار عرض البيانات (العين) */}
-                        <button
-                          onClick={() => setViewingUser(u)}
-                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-blue-500 transition-colors"
-                          title="عرض بيانات الموظف"
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <motion.tr
+                      key={u.id}
+                      layout
+                      className="border-t border-border hover:bg-muted/50 transition-colors"
+                    >
+                      <td className="p-3 text-sm font-medium text-foreground">
+                        {u.name}
+                      </td>
+                      <td className="p-3 text-sm text-muted-foreground">
+                        {u.username}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            u.role === "admin"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
                         >
-                          <Eye className="w-4 h-4" />
-                        </button>
-
-                        {/* زرار المسح */}
-                        {u.id !== currentUser?.id && u.role !== "admin" && (
+                          {u.role === "admin" ? "مدير نظام" : "كاشير"}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => deleteUser(u.id)}
-                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
-                            title="مسح الموظف"
+                            onClick={() => setViewingUser(u)}
+                            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-blue-500 transition-colors"
+                            title="عرض بيانات الموظف (الرقم السري)"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Eye className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
+
+                          {u.id !== currentUser?.id && u.role !== "admin" && (
+                            <button
+                              onClick={() => setUserToDelete(u.id)} // بنفتح الشاشة المنبثقة ونحفظ الـ ID بدل الحذف المباشر
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+                              title="مسح الموظف"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -223,7 +282,7 @@ const UsersPage = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    اسم المستخدم (Username)
+                    اسم المستخدم
                   </label>
                   <div
                     className="p-3 bg-muted rounded-lg font-semibold text-foreground"
@@ -235,22 +294,13 @@ const UsersPage = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    كلمة المرور (Password)
+                    كلمة المرور
                   </label>
                   <div
                     className="p-3 bg-muted rounded-lg font-bold text-primary tracking-widest"
                     dir="ltr"
                   >
                     {viewingUser.password || "غير مسجل"}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    الصلاحية
-                  </label>
-                  <div className="p-3 bg-muted rounded-lg font-semibold text-foreground">
-                    {viewingUser.role === "admin" ? "مدير نظام" : "كاشير"}
                   </div>
                 </div>
               </div>
@@ -261,6 +311,47 @@ const UsersPage = () => {
               >
                 إغلاق
               </Button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* شاشة تأكيد الحذف الجديدة الأنيقة */}
+      <AnimatePresence>
+        {userToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-card w-full max-w-sm rounded-2xl p-6 border border-border shadow-xl text-center relative"
+            >
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-foreground mb-2">
+                تأكيد الحذف
+              </h3>
+              <p className="text-muted-foreground mb-6 text-sm">
+                هل أنت متأكد من حذف هذا الموظف نهائياً؟ لا يمكن التراجع عن هذا
+                الإجراء.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  نعم، احذف
+                </Button>
+                <Button
+                  onClick={() => setUserToDelete(null)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  إلغاء
+                </Button>
+              </div>
             </motion.div>
           </div>
         )}

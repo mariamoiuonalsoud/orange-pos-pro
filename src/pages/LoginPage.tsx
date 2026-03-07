@@ -14,7 +14,7 @@ const LoginPage = () => {
   // State جديد للتحكم في إظهار وإخفاء الباسورد
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!username || !password) {
@@ -22,7 +22,7 @@ const LoginPage = () => {
       return;
     }
 
-    const success = login(username, password);
+    const success = await login(username, password);
 
     if (!success) {
       setError("اسم المستخدم أو كلمة المرور غير صحيحة");
@@ -64,7 +64,6 @@ const LoginPage = () => {
             </label>
             <Input
               type="text"
-              placeholder="مثال: admin"
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value);
@@ -83,7 +82,6 @@ const LoginPage = () => {
               <Input
                 // هنا بنغير نوع الحقل بناءً على حالة الـ state
                 type={showPassword ? "text" : "password"}
-                placeholder="********"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -116,11 +114,6 @@ const LoginPage = () => {
             دخول
           </Button>
         </form>
-
-        <div className="mt-6 text-xs text-muted-foreground border-t border-border pt-4">
-          <p>للتجربة كأدمن: admin / admin123</p>
-          <p>للتجربة ككاشير: cashier / cashier123</p>
-        </div>
       </div>
     </div>
   );

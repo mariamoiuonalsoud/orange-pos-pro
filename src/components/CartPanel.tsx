@@ -31,7 +31,8 @@ interface ReceiptProps {
 
 const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
   ({ sale, cashierName }, ref) => {
-    if (!sale) return null;
+    if (!sale || !sale.items) return null; // تأمين إضافي عشان الـ map ميضربش
+
     const tax = sale.total - sale.total / 1.15;
     const subtotal = sale.total / 1.15;
 
@@ -141,57 +142,34 @@ const CartPanel = () => {
     updateQuantity,
     clearCart,
     cartTotal,
-    cartCount,
     completeSale,
     findCustomerByPhone,
   } = usePOS();
   const { user } = useAuth();
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  // States
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentSale, setCurrentSale] = useState<SaleWithCustomer | null>(null);
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [isExisting, setIsExisting] = useState(false);
-
-  // Cash logic
   const [showCashInput, setShowCashInput] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false); // لتعطيل الأزرار أثناء البيع
 
   const tax = cartTotal * 0.15;
   const grandTotal = cartTotal + tax;
   const changeDue = parseFloat(cashReceived) - grandTotal;
 
-  /*const handlePrint = useReactToPrint({
-    contentRef: receiptRef,
-    documentTitle: currentSale?.receiptNumber || "receipt",
-  });*/
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: currentSale?.receiptNumber || "receipt",
-    // التعديل السحري هنا لإلغاء حجم A4 تماماً
     pageStyle: `
-    @page {
-      size: 80mm 80mm; /* تحديد حجم الورقة */
-      margin: 0 !important;       /* إلغاء الهوامش اللي بتصغر المحتوى */
-    }
+    @page { size: 80mm 80mm; margin: 0 !important; }
     @media print {
-      body {
-        width: 80mm !important;    /* إجبار العرض على 80 ملّي */
-        margin: 0 !important;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 0 !important;
-        -webkit-print-color-adjust: exact;
-        
-      }
-      /* إخفاء أي عناصر خارج الفاتورة قد تتسبب في تكبير الصفحة */
-      * {
-        overflow: visible !important;
-      }
+      body { width: 80mm !important; margin: 0 !important; display: flex; justify-content: center; align-items: center; padding: 0 !important; -webkit-print-color-adjust: exact; }
+      * { overflow: visible !important; }
     }
   `,
   });
@@ -214,26 +192,20 @@ const CartPanel = () => {
     }
   };
 
-  const processSale = (method: "cash" | "card" | "mobile") => {
-    if (!user) return;
+  // --- تحديث دالة البيع لتكون Async وتنتظر الداتابيز ---
+  const processSale = async (method: "cash" | "card" | "mobile") => {
+    if (!user || isProcessing) return;
 
-    // Validation مع الديزاين القوي للـ Toast
     const phoneRegex = /^01[0125][0-9]{8}$/;
     if (!phoneRegex.test(phone)) {
       toast.error("خطأ في رقم الهاتف!", {
         description: "يجب إدخال 11 رقم يبدأ بـ 01",
-        duration: 5000,
-        style: { border: "2px solid #ef4444" },
       });
       return;
     }
 
     if (!customerName.trim()) {
-      toast.error("اسم العميل مطلوب!", {
-        description: "لا يمكن إتمام البيع بدون تسجيل اسم العميل",
-        duration: 4000,
-        style: { border: "2px solid #ef4444" },
-      });
+      toast.error("اسم العميل مطلوب!");
       return;
     }
 
@@ -243,37 +215,41 @@ const CartPanel = () => {
         return;
       }
       if (parseFloat(cashReceived) < grandTotal || !cashReceived) {
-        toast.error("المبلغ غير كافي!", {
-          description: `المطلوب ${grandTotal.toFixed(2)} ج.م والمستلم أقل من ذلك.`,
-          duration: 5000,
-          style: { border: "2px solid #ef4444" },
-        });
+        toast.error("المبلغ غير كافي!");
         return;
       }
     }
 
-    // إتمام العملية
-    const sale = completeSale(
-      method,
-      user.id,
-      phone,
-      customerName,
-      method === "cash" ? parseFloat(cashReceived) : grandTotal,
-      changeDue > 0 ? changeDue : 0,
-    );
+    try {
+      setIsProcessing(true);
+      // إتمام العملية وانتظار النتيجة من السيرفر
+      const sale = await completeSale(
+        method,
+        user.id,
+        phone,
+        customerName,
+        method === "cash" ? parseFloat(cashReceived) : grandTotal,
+        changeDue > 0 ? changeDue : 0,
+      );
 
-    setCurrentSale(sale);
-    setShowSuccess(true);
-    setShowCheckout(false);
-    setShowCashInput(false);
-    setPhone("");
-    setCustomerName("");
-    setCashReceived("");
+      if (sale) {
+        setCurrentSale(sale);
+        setShowSuccess(true);
+        setShowCheckout(false);
+        setShowCashInput(false);
+        setPhone("");
+        setCustomerName("");
+        setCashReceived("");
+      }
+    } catch (error) {
+      toast.error("فشلت عملية البيع، يرجى المحاولة مرة أخرى");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
     <div className="w-full lg:w-96 bg-card border-r border-border flex flex-col h-full shadow-2xl relative">
-      {/* السلة */}
       <div className="p-4 border-b flex justify-between items-center bg-muted/20">
         <h2 className="font-bold flex items-center gap-2">
           <ShoppingBag className="w-5 h-5 text-primary" /> السلة
@@ -386,6 +362,7 @@ const CartPanel = () => {
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Button
+                      disabled={isProcessing}
                       onClick={() => processSale("cash")}
                       className="bg-success hover:bg-green-600 h-16 flex-col gap-1"
                     >
@@ -393,6 +370,7 @@ const CartPanel = () => {
                       <span className="text-[10px]">نقداً</span>
                     </Button>
                     <Button
+                      disabled={isProcessing}
                       onClick={() => processSale("card")}
                       className="bg-blue-600 hover:bg-blue-700 h-16 flex-col gap-1"
                     >
@@ -400,6 +378,7 @@ const CartPanel = () => {
                       <span className="text-[10px]">بطاقة</span>
                     </Button>
                     <Button
+                      disabled={isProcessing}
                       onClick={() => processSale("mobile")}
                       className="bg-slate-800 hover:bg-black h-16 flex-col gap-1"
                     >
@@ -414,11 +393,11 @@ const CartPanel = () => {
                   animate={{ opacity: 1 }}
                   className="space-y-4 py-2"
                 >
-                  <div className="p-3 bg-primary/5 rounded-xl border border-primary/20">
-                    <p className="text-center text-sm text-muted-foreground mb-1">
+                  <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 text-center">
+                    <p className="text-sm text-muted-foreground mb-1">
                       المبلغ الإجمالي
                     </p>
-                    <p className="text-center text-2xl font-black text-primary">
+                    <p className="text-2xl font-black text-primary">
                       {grandTotal.toFixed(2)} ج.م
                     </p>
                   </div>
@@ -444,10 +423,11 @@ const CartPanel = () => {
                       رجوع
                     </Button>
                     <Button
+                      disabled={isProcessing}
                       className="flex-[2] bg-success h-12 font-bold"
                       onClick={() => processSale("cash")}
                     >
-                      تأكيد العملية
+                      {isProcessing ? "جاري الحفظ..." : "تأكيد العملية"}
                     </Button>
                   </div>
                 </motion.div>
@@ -457,9 +437,9 @@ const CartPanel = () => {
         </div>
       )}
 
-      {/* شاشة النجاح والطباعة */}
+      {/* شاشة النجاح */}
       <AnimatePresence>
-        {showSuccess && (
+        {showSuccess && currentSale && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.8 }}
@@ -472,12 +452,12 @@ const CartPanel = () => {
               <img
                 src={logo}
                 className="w-16 h-16 mx-auto mb-3 object-contain"
+                alt="logo"
               />
               <h3 className="text-2xl font-black mb-1">تم البيع بنجاح!</h3>
               <p className="text-muted-foreground text-sm mb-6 font-mono">
-                {currentSale?.receiptNumber}
+                {currentSale.receiptNumber}
               </p>
-
               <div className="space-y-3">
                 <Button
                   onClick={handlePrint}
@@ -498,7 +478,6 @@ const CartPanel = () => {
         )}
       </AnimatePresence>
 
-      {/* الفاتورة المخفية للطباعة */}
       <div style={{ display: "none" }}>
         <ReceiptToPrint
           ref={receiptRef}
