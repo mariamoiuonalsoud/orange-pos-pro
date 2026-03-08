@@ -2,27 +2,35 @@ import React, { useState, useEffect, useRef } from "react";
 import { usePOS } from "@/contexts/POSContext";
 import { CATEGORIES } from "@/data/pos-data";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Barcode as BarcodeIcon } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Barcode as BarcodeIcon,
+  ShoppingCart,
+  X,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import CartPanel from "@/components/CartPanel";
 import POSHeader from "@/components/POSHeader";
 
 const POSPage = () => {
-  const { products, addToCart } = usePOS();
+  // ضفنا cartCount و cartTotal عشان نستخدمهم في زرار الموبايل
+  const { products, addToCart, cartCount, cartTotal } = usePOS();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // State جديد عشان يفتح السلة على الموبايل
+  const [showMobileCart, setShowMobileCart] = useState(false);
 
   // --- إعدادات الباركود سكنر ---
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // دالة التعامل مع المسح الضوئي (الباركود)
   const handleBarcodeScan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
 
-    // البحث عن المنتج الذي يطابق الـ ID الخاص به الباركود الممسوح
     const scannedProduct = products.find((p) => p.id === barcodeInput.trim());
 
     if (scannedProduct) {
@@ -37,7 +45,7 @@ const POSPage = () => {
           style: { border: "2px solid #ef4444" },
         });
       }
-      setBarcodeInput(""); // تصفير الخانة للمنتج التالي
+      setBarcodeInput("");
     } else {
       toast.error("منتج غير معروف", {
         description: `الباركود ${barcodeInput} غير مسجل بالنظام`,
@@ -47,13 +55,9 @@ const POSPage = () => {
     }
   };
 
-  // إبقاء التركيز (Focus) على خانة الباركود دائمًا لسرعة العمل (على الشاشات الكبيرة فقط)
   useEffect(() => {
     const keepFocus = () => {
-      // التعديل هنا: منع التركيز التلقائي على الموبايل عشان الكيبورد ميفتحش كل شوية ويزعج المستخدم
       if (window.innerWidth < 1024) return;
-
-      // نركز على الخانة فقط إذا لم يكن المستخدم يكتب في خانة البحث اليدوي
       if (
         document.activeElement?.tagName !== "INPUT" ||
         document.activeElement === barcodeInputRef.current
@@ -63,12 +67,10 @@ const POSPage = () => {
     };
 
     keepFocus();
-    // إعادة التركيز كل 5 ثواني لضمان الجاهزية
     const interval = setInterval(keepFocus, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // تصفية المنتجات للبحث اليدوي
   const filteredProducts = products.filter((p) => {
     const matchCategory =
       selectedCategory === "all" || p.category === selectedCategory;
@@ -82,12 +84,10 @@ const POSPage = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <POSHeader />
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* قسم المنتجات */}
-        <div className="flex-1 flex flex-col p-4 overflow-hidden">
-          {/* شريط البحث والباركود */}
+        <div className="flex-1 flex flex-col p-4 overflow-hidden pb-24 lg:pb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* 1. البحث اليدوي بالاسم */}
             <div className="relative">
               <Search className="absolute right-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
@@ -98,7 +98,6 @@ const POSPage = () => {
               />
             </div>
 
-            {/* 2. منطقة مسح الباركود (مهمة جداً للكاشير) */}
             <form onSubmit={handleBarcodeScan} className="relative">
               <BarcodeIcon className="absolute right-3 top-3 h-5 w-5 text-primary animate-pulse" />
               <Input
@@ -114,7 +113,6 @@ const POSPage = () => {
             </form>
           </div>
 
-          {/* الفئات (Categories) */}
           <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
             {CATEGORIES.map((cat) => (
               <motion.button
@@ -133,7 +131,6 @@ const POSPage = () => {
             ))}
           </div>
 
-          {/* شبكة المنتجات (Products Grid) */}
           <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
               <AnimatePresence mode="popLayout">
@@ -146,8 +143,8 @@ const POSPage = () => {
                     exit={{ opacity: 0, scale: 0.9 }}
                     whileHover={{ y: -5 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => addToCart(product)} // زرار الشراء هنا أصبح مباشر وسريع
-                    className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary hover:shadow-xl transition-all group relative overflow-hidden flex flex-col items-center select-none touch-manipulation" // ضفنا touch-manipulation لتحسين اللمس
+                    onClick={() => addToCart(product)}
+                    className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary hover:shadow-xl transition-all group relative overflow-hidden flex flex-col items-center select-none touch-manipulation"
                   >
                     <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform">
                       {product.image}
@@ -170,8 +167,6 @@ const POSPage = () => {
                         المخزون: {product.stock}
                       </div>
                     </div>
-
-                    {/* التعديل هنا: منع تأثيرات الـ Hover من التداخل مع اللمس عن طريق pointer-events-none وإخفائها على الموبايل */}
                     <div className="absolute inset-0 bg-primary/5 opacity-0 lg:group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                       <div className="bg-primary text-white p-2 rounded-full shadow-lg translate-y-4 lg:group-hover:translate-y-0 transition-transform">
                         <Plus className="w-6 h-6" />
@@ -191,10 +186,59 @@ const POSPage = () => {
           </div>
         </div>
 
-        {/* لوحة السلة الجانبية */}
-        <div className="hidden lg:block">
+        {/* لوحة السلة للشاشات الكبيرة */}
+        <div className="hidden lg:block w-96 border-r border-border bg-card">
           <CartPanel />
         </div>
+
+        {/* زرار السلة العائم للموبايل فقط */}
+        {cartCount > 0 && (
+          <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40">
+            <button
+              onClick={() => setShowMobileCart(true)}
+              className="w-full bg-primary text-primary-foreground p-4 rounded-2xl shadow-[0_10px_40px_rgba(239,68,68,0.4)] flex items-center justify-between font-bold text-lg animate-in slide-in-from-bottom-5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                  <ShoppingCart className="w-4 h-4" /> {cartCount}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>عرض السلة</span>
+                <span>{cartTotal.toFixed(2)} ج.م</span>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* شاشة السلة الكاملة للموبايل */}
+        <AnimatePresence>
+          {showMobileCart && (
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed inset-0 z-50 bg-background flex flex-col lg:hidden"
+            >
+              <div className="p-4 border-b flex justify-between items-center bg-muted/20">
+                <h2 className="font-bold flex items-center gap-2 text-lg">
+                  <ShoppingCart className="w-6 h-6 text-primary" /> السلة
+                </h2>
+                <button
+                  onClick={() => setShowMobileCart(false)}
+                  className="p-2 bg-muted rounded-full hover:bg-destructive hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden relative">
+                {/* استدعاء مكون السلة اللي فيه الدفع والطباعة */}
+                <CartPanel />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
