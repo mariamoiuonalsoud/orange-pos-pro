@@ -1,13 +1,44 @@
-import React, { useState } from "react";
-import { usePOS } from "@/contexts/POSContext"; // ربطنا بالبيانات الحقيقية
+import React, { useState, useEffect } from "react";
+import { usePOS } from "@/contexts/POSContext";
 import POSHeader from "@/components/POSHeader";
 import { motion } from "framer-motion";
-import { Users, Star, Phone, Search, ShoppingBag } from "lucide-react";
+import { Users, Phone, Search, ShoppingBag } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase"; // ضفنا سطر الاتصال بقاعدة البيانات
 
 const CustomersPage = () => {
-  const { customers, sales } = usePOS(); // بنجيب العملاء والمبيعات من الـ Context
+  const { customers } = usePOS();
   const [search, setSearch] = useState("");
+
+  // State جديد عشان نخزن فيه إحصائيات كل عميل (عدد الطلبات والمجموع)
+  const [customerStats, setCustomerStats] = useState<
+    Record<string, { count: number; total: number }>
+  >({});
+
+  // أول ما الصفحة تفتح، بنجيب كل الفواتير ونحسب لكل عميل طلباته
+  useEffect(() => {
+    const fetchStats = async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("customer_id, total_amount");
+
+      if (data && !error) {
+        const stats: Record<string, { count: number; total: number }> = {};
+        data.forEach((order) => {
+          if (order.customer_id) {
+            if (!stats[order.customer_id]) {
+              stats[order.customer_id] = { count: 0, total: 0 };
+            }
+            stats[order.customer_id].count += 1;
+            stats[order.customer_id].total += Number(order.total_amount || 0);
+          }
+        });
+        setCustomerStats(stats);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   const filtered = customers.filter(
     (c) => c.name.includes(search) || c.phone.includes(search),
@@ -39,14 +70,11 @@ const CustomersPage = () => {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((customer, i) => {
-              // حساب إجمالي المشتريات وعدد الطلبات الحقيقي من المبيعات
-              const customerSales = sales.filter(
-                (s) => s.customerPhone === customer.phone,
-              );
-              const totalSpent = customerSales.reduce(
-                (sum, s) => sum + s.total,
-                0,
-              );
+              // بنجيب إحصائيات العميل من الـ State، ولو لسه شاري أول مرة بنخليها 0
+              const stats = customerStats[customer.id] || {
+                count: 0,
+                total: 0,
+              };
 
               return (
                 <motion.div
@@ -57,16 +85,16 @@ const CustomersPage = () => {
                   className="bg-card rounded-xl border border-border p-5 hover:shadow-lg hover:border-primary/30 transition-all group"
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors font-bold text-lg">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors font-bold text-lg uppercase">
                       {customer.name[0]}
                     </div>
                     <div>
                       <h3 className="font-bold text-foreground">
                         {customer.name}
                       </h3>
-                      <div className="flex items-center gap-1 text-xs text-primary">
+                      <div className="flex items-center gap-1 text-xs text-primary mt-1">
                         <ShoppingBag className="w-3 h-3" />
-                        <span>{customerSales.length} طلبات ناجحة</span>
+                        <span>{stats.count} طلبات ناجحة</span>
                       </div>
                     </div>
                   </div>
@@ -87,7 +115,7 @@ const CustomersPage = () => {
                         إجمالي المشتريات
                       </span>
                       <span className="text-primary font-bold text-base">
-                        {totalSpent.toFixed(2)} ج.م
+                        {stats.total.toFixed(2)} ج.م
                       </span>
                     </div>
                   </div>
