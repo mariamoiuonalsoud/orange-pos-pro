@@ -26,7 +26,7 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
         <div className="text-center border-b border-black pb-2 mb-2">
           <h2 className="text-lg font-bold uppercase">Orange Group</h2>
           <p>فرع المقطم - القاهرة</p>
-          <p>هاتف: 01000000000</p>
+          <p>هاتف: 01107288930</p>
           <p className="mt-1 text-[10px]">
             {new Date(sale.date).toLocaleString("ar-EG")}
           </p>
