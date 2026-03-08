@@ -47,9 +47,12 @@ const POSPage = () => {
     }
   };
 
-  // إبقاء التركيز (Focus) على خانة الباركود دائمًا لسرعة العمل
+  // إبقاء التركيز (Focus) على خانة الباركود دائمًا لسرعة العمل (على الشاشات الكبيرة فقط)
   useEffect(() => {
     const keepFocus = () => {
+      // التعديل هنا: منع التركيز التلقائي على الموبايل عشان الكيبورد ميفتحش كل شوية ويزعج المستخدم
+      if (window.innerWidth < 1024) return;
+
       // نركز على الخانة فقط إذا لم يكن المستخدم يكتب في خانة البحث اليدوي
       if (
         document.activeElement?.tagName !== "INPUT" ||
@@ -105,7 +108,7 @@ const POSPage = () => {
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 className="pr-10 h-12 text-base rounded-xl border-2 border-primary ring-offset-background focus-visible:ring-2 focus-visible:ring-primary bg-primary/5 font-mono"
               />
-              <div className="absolute left-3 top-3.5 px-2 py-0.5 bg-primary text-primary-foreground text-[10px] rounded-full font-bold">
+              <div className="absolute left-3 top-3.5 px-2 py-0.5 bg-primary text-primary-foreground text-[10px] rounded-full font-bold hidden sm:block">
                 Scanner Ready
               </div>
             </form>
@@ -142,9 +145,9 @@ const POSPage = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     whileHover={{ y: -5 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => addToCart(product)}
-                    className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary hover:shadow-xl transition-all group relative overflow-hidden flex flex-col items-center"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => addToCart(product)} // زرار الشراء هنا أصبح مباشر وسريع
+                    className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary hover:shadow-xl transition-all group relative overflow-hidden flex flex-col items-center select-none touch-manipulation" // ضفنا touch-manipulation لتحسين اللمس
                   >
                     <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform">
                       {product.image}
@@ -168,9 +171,9 @@ const POSPage = () => {
                       </div>
                     </div>
 
-                    {/* خلفية تظهر عند الوقوف بالماوس */}
-                    <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="bg-primary text-white p-2 rounded-full shadow-lg translate-y-4 group-hover:translate-y-0 transition-transform">
+                    {/* التعديل هنا: منع تأثيرات الـ Hover من التداخل مع اللمس عن طريق pointer-events-none وإخفائها على الموبايل */}
+                    <div className="absolute inset-0 bg-primary/5 opacity-0 lg:group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <div className="bg-primary text-white p-2 rounded-full shadow-lg translate-y-4 lg:group-hover:translate-y-0 transition-transform">
                         <Plus className="w-6 h-6" />
                       </div>
                     </div>
