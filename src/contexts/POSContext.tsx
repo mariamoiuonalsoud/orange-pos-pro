@@ -57,6 +57,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // دالة جلب البيانات (تم التعديل لربط العميل بالفاتورة)
   const fetchInitialData = async () => {
     try {
       const { data: prods } = await supabase
@@ -75,18 +76,26 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
+
       if (ords) {
-        const formattedSales: SaleWithCustomer[] = ords.map((o) => ({
-          id: o.id,
-          receiptNumber: o.receipt_number,
-          total: o.total_amount,
-          date: o.created_at,
-          paymentMethod: o.payment_method,
-          cashierId: o.cashier_id,
-          amountPaid: o.amount_paid,
-          changeDue: o.change_due,
-          items: [],
-        }));
+        const formattedSales: SaleWithCustomer[] = ords.map((o) => {
+          // هنا بنجيب بيانات العميل من مصفوفة العملاء باستخدام الـ customer_id اللي في الفاتورة
+          const customer = custs?.find((c) => c.id === o.customer_id);
+
+          return {
+            id: o.id,
+            receiptNumber: o.receipt_number,
+            total: o.total_amount,
+            date: o.created_at,
+            paymentMethod: o.payment_method,
+            cashierId: o.cashier_id,
+            amountPaid: o.amount_paid,
+            changeDue: o.change_due,
+            customerName: customer ? customer.name : "", // لو لقيناه نحط اسمه
+            customerPhone: customer ? customer.phone : "", // ونحط رقمه
+            items: [],
+          };
+        });
         setSales(formattedSales);
       }
     } catch (error) {
@@ -142,7 +151,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const findCustomerByPhone = (phone: string) =>
     customers.find((c) => c.phone === phone);
 
-  // --- دالة إتمام البيع بعد إضافة الحماية (Validation) ---
+  // دالة إتمام البيع
   const completeSale = async (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
@@ -151,15 +160,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     amountPaid: number = 0,
     changeDue: number = 0,
   ): Promise<SaleWithCustomer | null> => {
-    // ==========================================
-    // 0. التحقق اللحظي من المخزون قبل أي خطوة
-    // ==========================================
     if (cart.length === 0) return null;
 
-    // بنجيب الـ IDs بتاعة المنتجات اللي في السلة
     const productIdsInCart = cart.map((item) => item.id);
-
-    // بنسأل الداتابيز عن المخزون الحقيقي للمنتجات دي دلوقتي
     const { data: currentStockData, error: stockError } = await supabase
       .from("products")
       .select("id, name, stock")
@@ -170,15 +173,12 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
 
-    // بنقارن الكمية المطلوبة بالمخزون الحقيقي
     for (const cartItem of cart) {
       const dbProduct = currentStockData.find((p) => p.id === cartItem.id);
-
       if (!dbProduct) {
         toast.error(`المنتج ${cartItem.name} تم حذفه من قاعدة البيانات`);
         return null;
       }
-
       if (cartItem.quantity > dbProduct.stock) {
         toast.error(
           `فشلت العملية! كمية "${cartItem.name}" غير متوفرة. المتاح: ${dbProduct.stock}`,
@@ -187,12 +187,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             style: { border: "2px solid #ef4444" },
           },
         );
-        return null; // بنوقف البيع فوراً لو الكمية مش مكفية
+        return null;
       }
     }
-    // ==========================================
 
-    // 1. التعامل مع العميل (لو مش موجود نضيفه)
     let customer_id = null;
     if (customerPhone && customerPhone !== "-") {
       let cust = findCustomerByPhone(customerPhone);
@@ -214,7 +212,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     const total = cartTotal * 1.15;
     const vat_amount = cartTotal * 0.15;
 
-    // 2. تسجيل الفاتورة الأساسية
     const { data: newOrder, error: orderError } = await supabase
       .from("orders")
       .insert([
@@ -237,7 +234,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
 
-    // 3. حفظ تفاصيل المنتجات المباعة في الفاتورة
     const orderItems = cart.map((item) => ({
       order_id: newOrder.id,
       product_id: item.id,
@@ -247,9 +243,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }));
     await supabase.from("order_items").insert(orderItems);
 
-    // 4. خصم الكميات المباعة من المخزن
     for (const item of cart) {
-      // هنا بنستخدم المخزون اللي جبناه من الداتابيز عشان نخصم منه (أدق بكتير)
       const dbProduct = currentStockData.find((p) => p.id === item.id);
       if (dbProduct) {
         const newStock = dbProduct.stock - item.quantity;
@@ -260,11 +254,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    // 5. تصفير السلة وتحديث البيانات
     clearCart();
     fetchInitialData();
 
-    // نرجع الفاتورة عشان الـ UI يقدر يطبعها
     const sale: SaleWithCustomer = {
       id: newOrder.id,
       receiptNumber,
@@ -281,7 +273,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     return sale;
   };
 
-  // دوال المخزون (المنتجات)
   const addProduct = async (p: Omit<Product, "id">): Promise<boolean> => {
     const { error } = await supabase.from("products").insert([
       {
