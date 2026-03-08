@@ -4,8 +4,7 @@ import POSHeader from "@/components/POSHeader";
 import { Receipt, CreditCard, Users, Calendar, Banknote } from "lucide-react";
 
 const ReportsPage = () => {
-  // ضفنا استدعاء للـ customers من الـ Context
-  const { sales, customers } = usePOS();
+  const { sales } = usePOS();
 
   // إجمالي المبيعات (كل الفلوس بالضريبة)
   const totalSalesAmount = sales.reduce((sum, s) => sum + s.total, 0);
@@ -76,49 +75,35 @@ const ReportsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {sales.map((sale) => {
-                  // هنا بندور على العميل المرتبط بالفاتورة باستخدام رقم التليفون أو الـ ID
-                  // بما إن دالة الجلب عندنا مش بتجيب الـ customer_id صراحة، هنعتمد على الـ customerPhone اللي إنتي كنتي مسجلاه في الـ Interface
-                  const customer = customers.find(
-                    (c) => c.phone === sale.customerPhone,
-                  );
-
-                  // لو لقينا العميل، ناخد اسمه ورقمه، ولو ملقيناهوش نرجع للكلمات الافتراضية
-                  const displayCustomerName = customer
-                    ? customer.name
-                    : sale.customerName || "عميل نقدي";
-                  const displayCustomerPhone = customer
-                    ? customer.phone
-                    : sale.customerPhone || "بدون هاتف";
-
-                  return (
-                    <tr
-                      key={sale.id}
-                      className="border-t border-border hover:bg-muted/10 transition-colors"
-                    >
-                      <td className="p-4 font-mono font-bold text-xs">
-                        {sale.receiptNumber}
-                      </td>
-                      <td className="p-4">
-                        <div className="font-bold">{displayCustomerName}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {displayCustomerPhone}
-                        </div>
-                      </td>
-                      <td className="p-4 font-bold text-primary">
-                        {sale.total.toFixed(2)} ج.م
-                      </td>
-                      <td className="p-4 text-xs font-bold text-muted-foreground">
-                        {sale.paymentMethod === "cash"
-                          ? "نقداً"
-                          : "بطاقة / محفظة"}
-                      </td>
-                      <td className="p-4 text-[10px]">
-                        {new Date(sale.date).toLocaleString("ar-EG")}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {sales.map((sale) => (
+                  <tr
+                    key={sale.id}
+                    className="border-t border-border hover:bg-muted/10 transition-colors"
+                  >
+                    <td className="p-4 font-mono font-bold text-xs">
+                      {sale.receiptNumber}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-bold">
+                        {sale.customerName || "عميل نقدي"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {sale.customerPhone || "بدون هاتف"}
+                      </div>
+                    </td>
+                    <td className="p-4 font-bold text-primary">
+                      {sale.total.toFixed(2)} ج.م
+                    </td>
+                    <td className="p-4 text-xs font-bold text-muted-foreground">
+                      {sale.paymentMethod === "cash"
+                        ? "نقداً"
+                        : "بطاقة / محفظة"}
+                    </td>
+                    <td className="p-4 text-[10px]">
+                      {new Date(sale.date).toLocaleString("ar-EG")}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
