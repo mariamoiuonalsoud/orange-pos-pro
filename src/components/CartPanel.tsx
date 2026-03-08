@@ -43,8 +43,8 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
         dir="rtl"
       >
         <div className="text-center border-b border-black pb-2 mb-3">
-          <h2 className="text-lg font-bold">ORANGE GROUP POS</h2>
-          <p className="text-[10px]">فرع الشروق | هاتف: 01000000000</p>
+          <h2 className="text-lg font-bold">ORANGE GROUP</h2>
+          <p className="text-[10px]">فرع المقطم | هاتف: 01107288930</p>
           <p className="text-[10px] mt-1">
             {new Date(sale.date).toLocaleString("ar-EG")}
           </p>
