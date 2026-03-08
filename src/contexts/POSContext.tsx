@@ -57,7 +57,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // دالة جلب البيانات (تم التعديل لربط العميل بالفاتورة)
+  // دالة جلب البيانات
   const fetchInitialData = async () => {
     try {
       const { data: prods } = await supabase
@@ -72,15 +72,38 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .order("created_at", { ascending: false });
       if (custs) setCustomers(custs);
 
+      // جلب الفواتير
       const { data: ords } = await supabase
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
 
+      // التعديل الجديد: جلب تفاصيل المنتجات المباعة في الفواتير
+      const { data: orderItemsData } = await supabase
+        .from("order_items")
+        .select("*");
+
       if (ords) {
         const formattedSales: SaleWithCustomer[] = ords.map((o) => {
-          // هنا بنجيب بيانات العميل من مصفوفة العملاء باستخدام الـ customer_id اللي في الفاتورة
           const customer = custs?.find((c) => c.id === o.customer_id);
+
+          // تجهيز قائمة المنتجات الخاصة بهذه الفاتورة تحديداً للطباعة
+          const saleItems =
+            orderItemsData
+              ?.filter((item) => item.order_id === o.id)
+              .map((item) => {
+                const p = prods?.find((prod) => prod.id === item.product_id);
+                return {
+                  id: item.product_id,
+                  name: p ? p.name : "منتج غير معروف",
+                  price: item.unit_price,
+                  quantity: item.quantity,
+                  stock: 0,
+                  category: "",
+                  image: "📦",
+                  barcode: "",
+                };
+              }) || [];
 
           return {
             id: o.id,
@@ -91,9 +114,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             cashierId: o.cashier_id,
             amountPaid: o.amount_paid,
             changeDue: o.change_due,
-            customerName: customer ? customer.name : "", // لو لقيناه نحط اسمه
-            customerPhone: customer ? customer.phone : "", // ونحط رقمه
-            items: [],
+            customerName: customer ? customer.name : "",
+            customerPhone: customer ? customer.phone : "",
+            items: saleItems, // تمرير المنتجات بدلاً من مصفوفة فارغة
           };
         });
         setSales(formattedSales);
@@ -151,7 +174,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const findCustomerByPhone = (phone: string) =>
     customers.find((c) => c.phone === phone);
 
-  // دالة إتمام البيع
   const completeSale = async (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
