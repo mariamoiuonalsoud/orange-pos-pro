@@ -6,7 +6,6 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-// استوردنا Interfaces بس وشيلنا DEMO_PRODUCTS
 import { CartItem, Product, Sale } from "@/data/pos-data";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
@@ -36,8 +35,6 @@ interface POSContextType {
   cartTotal: number;
   cartCount: number;
   findCustomerByPhone: (phone: string) => Customer | undefined;
-
-  // حولنا دوال التعديل والبيع لـ Promise لأنها بتكلم داتابيز
   completeSale: (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
@@ -60,30 +57,25 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // دالة جلب البيانات من قاعدة البيانات
   const fetchInitialData = async () => {
     try {
-      // 1. جلب المنتجات
       const { data: prods } = await supabase
         .from("products")
         .select("*")
         .order("created_at", { ascending: false });
       if (prods) setProducts(prods);
 
-      // 2. جلب العملاء
       const { data: custs } = await supabase
         .from("customers")
         .select("*")
         .order("created_at", { ascending: false });
       if (custs) setCustomers(custs);
 
-      // 3. جلب الفواتير (لتقارير المبيعات)
       const { data: ords } = await supabase
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
       if (ords) {
-        // بنحولها لنفس شكل الـ UI بتاعك
         const formattedSales: SaleWithCustomer[] = ords.map((o) => ({
           id: o.id,
           receiptNumber: o.receipt_number,
@@ -93,7 +85,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
           cashierId: o.cashier_id,
           amountPaid: o.amount_paid,
           changeDue: o.change_due,
-          items: [], // ممكن نبقى نجيبها من جدول order_items لو محتاجاها في التقارير
+          items: [],
         }));
         setSales(formattedSales);
       }
@@ -102,7 +94,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // أول ما النظام يفتح يجيب الداتا
   useEffect(() => {
     fetchInitialData();
   }, []);
@@ -151,7 +142,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const findCustomerByPhone = (phone: string) =>
     customers.find((c) => c.phone === phone);
 
-  // دالة إتمام البيع (بتتواصل مع 4 جداول في نفس اللحظة)
+  // --- دالة إتمام البيع بعد إضافة الحماية (Validation) ---
   const completeSale = async (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
@@ -160,6 +151,47 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     amountPaid: number = 0,
     changeDue: number = 0,
   ): Promise<SaleWithCustomer | null> => {
+    // ==========================================
+    // 0. التحقق اللحظي من المخزون قبل أي خطوة
+    // ==========================================
+    if (cart.length === 0) return null;
+
+    // بنجيب الـ IDs بتاعة المنتجات اللي في السلة
+    const productIdsInCart = cart.map((item) => item.id);
+
+    // بنسأل الداتابيز عن المخزون الحقيقي للمنتجات دي دلوقتي
+    const { data: currentStockData, error: stockError } = await supabase
+      .from("products")
+      .select("id, name, stock")
+      .in("id", productIdsInCart);
+
+    if (stockError || !currentStockData) {
+      toast.error("حدث خطأ أثناء التحقق من المخزون");
+      return null;
+    }
+
+    // بنقارن الكمية المطلوبة بالمخزون الحقيقي
+    for (const cartItem of cart) {
+      const dbProduct = currentStockData.find((p) => p.id === cartItem.id);
+
+      if (!dbProduct) {
+        toast.error(`المنتج ${cartItem.name} تم حذفه من قاعدة البيانات`);
+        return null;
+      }
+
+      if (cartItem.quantity > dbProduct.stock) {
+        toast.error(
+          `فشلت العملية! كمية "${cartItem.name}" غير متوفرة. المتاح: ${dbProduct.stock}`,
+          {
+            duration: 6000,
+            style: { border: "2px solid #ef4444" },
+          },
+        );
+        return null; // بنوقف البيع فوراً لو الكمية مش مكفية
+      }
+    }
+    // ==========================================
+
     // 1. التعامل مع العميل (لو مش موجود نضيفه)
     let customer_id = null;
     if (customerPhone && customerPhone !== "-") {
@@ -217,11 +249,15 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
     // 4. خصم الكميات المباعة من المخزن
     for (const item of cart) {
-      const newStock = item.stock - item.quantity;
-      await supabase
-        .from("products")
-        .update({ stock: newStock })
-        .eq("id", item.id);
+      // هنا بنستخدم المخزون اللي جبناه من الداتابيز عشان نخصم منه (أدق بكتير)
+      const dbProduct = currentStockData.find((p) => p.id === item.id);
+      if (dbProduct) {
+        const newStock = dbProduct.stock - item.quantity;
+        await supabase
+          .from("products")
+          .update({ stock: newStock })
+          .eq("id", item.id);
+      }
     }
 
     // 5. تصفير السلة وتحديث البيانات
