@@ -30,10 +30,34 @@ const POSPage = () => {
     const scannedCode = barcodeInput.trim();
     if (!scannedCode) return;
 
-    // التعديل هنا: البحث في حقل الباركود بدلاً من الـ ID وتحويل الطرفين لنص
-    const scannedProduct = products.find(
-      (p) => String(p.barcode) === String(scannedCode),
+    // --- كشاف الأخطاء: افتحي الـ Console بـ F12 عشان تشوفي النتيجة ---
+    console.log(
+      "الباركود اللي اتقرأ:",
+      scannedCode,
+      "| طوله:",
+      scannedCode.length,
     );
+    console.log(
+      "كل المنتجات اللي السيستم شايفها:",
+      products.map((p) => ({
+        اسم_المنتج: p.name,
+        الباركود_في_الداتابيز: p.barcode,
+      })),
+    );
+    // ---------------------------------------------------------
+
+    // بحث متقدم: بيقارن النص، ولو فشل بيقارن كأرقام (عشان يتجاهل الأصفار اللي على الشمال)
+    const scannedProduct = products.find((p) => {
+      if (!p.barcode) return false; // لو المنتج ملوش باركود متسجل يتجاهله
+
+      const dbBarcode = String(p.barcode).trim();
+      const inputBarcode = String(scannedCode).trim();
+
+      // التطابق التام كنص أو التطابق كرقم
+      return (
+        dbBarcode === inputBarcode || Number(dbBarcode) === Number(inputBarcode)
+      );
+    });
 
     if (scannedProduct) {
       if (scannedProduct.stock > 0) {
@@ -47,13 +71,13 @@ const POSPage = () => {
           style: { border: "2px solid #ef4444" },
         });
       }
-      setBarcodeInput("");
+      setBarcodeInput(""); // تفريغ الحقل
     } else {
       toast.error("منتج غير معروف", {
         description: `الباركود ${scannedCode} غير مسجل بالنظام`,
         style: { border: "2px solid #ef4444" },
       });
-      setBarcodeInput("");
+      setBarcodeInput(""); // تفريغ الحقل
     }
   };
 
