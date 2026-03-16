@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { usePOS } from "@/contexts/POSContext";
 import { CATEGORIES } from "@/data/pos-data";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,59 +25,65 @@ const POSPage = () => {
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  const handleBarcodeScan = (e: React.FormEvent) => {
-    e.preventDefault();
-    const scannedCode = barcodeInput.trim();
-    if (!scannedCode) return;
+  // فصلنا عملية البحث في دالة لوحدها عشان نقدر نستدعيها تلقائياً
+  const processBarcode = useCallback(
+    (code: string) => {
+      const scannedCode = code.trim();
+      if (!scannedCode) return;
 
-    // --- كشاف الأخطاء: افتحي الـ Console بـ F12 عشان تشوفي النتيجة ---
-    console.log(
-      "الباركود اللي اتقرأ:",
-      scannedCode,
-      "| طوله:",
-      scannedCode.length,
-    );
-    console.log(
-      "كل المنتجات اللي السيستم شايفها:",
-      products.map((p) => ({
-        اسم_المنتج: p.name,
-        الباركود_في_الداتابيز: p.barcode,
-      })),
-    );
-    // ---------------------------------------------------------
+      const scannedProduct = products.find((p) => {
+        if (!p.barcode) return false;
+        const dbBarcode = String(p.barcode).trim();
+        const inputBarcode = String(scannedCode).trim();
+        return (
+          dbBarcode === inputBarcode ||
+          Number(dbBarcode) === Number(inputBarcode)
+        );
+      });
 
-    // بحث متقدم: بيقارن النص، ولو فشل بيقارن كأرقام (عشان يتجاهل الأصفار اللي على الشمال)
-    const scannedProduct = products.find((p) => {
-      if (!p.barcode) return false; // لو المنتج ملوش باركود متسجل يتجاهله
-
-      const dbBarcode = String(p.barcode).trim();
-      const inputBarcode = String(scannedCode).trim();
-
-      // التطابق التام كنص أو التطابق كرقم
-      return (
-        dbBarcode === inputBarcode || Number(dbBarcode) === Number(inputBarcode)
-      );
-    });
-
-    if (scannedProduct) {
-      if (scannedProduct.stock > 0) {
-        addToCart(scannedProduct);
-        toast.success(`تمت إضافة ${scannedProduct.name}`, {
-          position: "bottom-right",
-          duration: 1500,
-        });
+      if (scannedProduct) {
+        if (scannedProduct.stock > 0) {
+          addToCart(scannedProduct);
+          toast.success(`تمت إضافة ${scannedProduct.name}`, {
+            position: "bottom-right",
+            duration: 1500,
+          });
+        } else {
+          toast.error("هذا المنتج نفذ من المخزن!", {
+            style: { border: "2px solid #ef4444" },
+          });
+        }
       } else {
-        toast.error("هذا المنتج نفذ من المخزن!", {
+        toast.error("منتج غير معروف", {
+          description: `الباركود ${scannedCode} غير مسجل بالنظام`,
           style: { border: "2px solid #ef4444" },
         });
       }
-      setBarcodeInput(""); // تفريغ الحقل
-    } else {
-      toast.error("منتج غير معروف", {
-        description: `الباركود ${scannedCode} غير مسجل بالنظام`,
-        style: { border: "2px solid #ef4444" },
-      });
-      setBarcodeInput(""); // تفريغ الحقل
+
+      // تفريغ الحقل في كل الحالات عشان يكون جاهز للقراءة اللي بعدها
+      setBarcodeInput("");
+    },
+    [products, addToCart],
+  );
+
+  // التعديل السحري: إضافة تلقائية بمجرد توقف جهاز الباركود عن الكتابة بجزء من الثانية
+  useEffect(() => {
+    if (!barcodeInput.trim()) return;
+
+    // بنستنى 150 ملي ثانية، لو مفيش رقم جديد اتكتب، بنضيف المنتج فوراً
+    const timer = setTimeout(() => {
+      processBarcode(barcodeInput);
+    }, 150);
+
+    // لو جهاز الباركود لسه بيكتب أرقام جديدة بسرعة، بنلغي التايمر القديم ونبدأ واحد جديد
+    return () => clearTimeout(timer);
+  }, [barcodeInput, processBarcode]);
+
+  // دي عشان لو حبيتي تكتبي الرقم بإيدك وتدوسي Enter عادي كاحتياطي
+  const handleBarcodeScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (barcodeInput.trim()) {
+      processBarcode(barcodeInput);
     }
   };
 
