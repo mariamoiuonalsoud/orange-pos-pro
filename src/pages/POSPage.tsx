@@ -25,7 +25,6 @@ const POSPage = () => {
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // فصلنا عملية البحث في دالة لوحدها عشان نقدر نستدعيها تلقائياً
   const processBarcode = useCallback(
     (code: string) => {
       const scannedCode = code.trim();
@@ -60,26 +59,26 @@ const POSPage = () => {
         });
       }
 
-      // تفريغ الحقل في كل الحالات عشان يكون جاهز للقراءة اللي بعدها
       setBarcodeInput("");
     },
     [products, addToCart],
   );
 
-  // التعديل السحري: إضافة تلقائية بمجرد توقف جهاز الباركود عن الكتابة بجزء من الثانية
+  // التعديل: الانتظار لحد ما الطول يوصل 12 رقم بالظبط
   useEffect(() => {
-    if (!barcodeInput.trim()) return;
+    const code = barcodeInput.trim();
 
-    // بنستنى 150 ملي ثانية، لو مفيش رقم جديد اتكتب، بنضيف المنتج فوراً
+    // لو الباركود لسه مجابش 12 رقم، مش هيعمل حاجة
+    if (code.length < 12) return;
+
+    // بمجرد ما يوصل 12 رقم، هيستنى وقت بسيط جداً (150 ملي ثانية) ويضيفه فوراً
     const timer = setTimeout(() => {
-      processBarcode(barcodeInput);
+      processBarcode(code);
     }, 150);
 
-    // لو جهاز الباركود لسه بيكتب أرقام جديدة بسرعة، بنلغي التايمر القديم ونبدأ واحد جديد
     return () => clearTimeout(timer);
   }, [barcodeInput, processBarcode]);
 
-  // دي عشان لو حبيتي تكتبي الرقم بإيدك وتدوسي Enter عادي كاحتياطي
   const handleBarcodeScan = (e: React.FormEvent) => {
     e.preventDefault();
     if (barcodeInput.trim()) {
@@ -117,7 +116,6 @@ const POSPage = () => {
       <POSHeader />
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        {/* قسم المنتجات */}
         <div className="flex-1 flex flex-col p-4 overflow-hidden pb-24 lg:pb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="relative">
@@ -218,12 +216,10 @@ const POSPage = () => {
           </div>
         </div>
 
-        {/* لوحة السلة للشاشات الكبيرة */}
         <div className="hidden lg:block w-96 border-r border-border bg-card">
           <CartPanel />
         </div>
 
-        {/* زرار السلة العائم للموبايل فقط */}
         {cartCount > 0 && (
           <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40">
             <button
@@ -243,7 +239,6 @@ const POSPage = () => {
           </div>
         )}
 
-        {/* شاشة السلة الكاملة للموبايل */}
         <AnimatePresence>
           {showMobileCart && (
             <motion.div
@@ -265,7 +260,6 @@ const POSPage = () => {
                 </button>
               </div>
               <div className="flex-1 overflow-hidden relative">
-                {/* استدعاء مكون السلة اللي فيه الدفع والطباعة */}
                 <CartPanel />
               </div>
             </motion.div>
