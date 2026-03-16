@@ -64,14 +64,11 @@ const POSPage = () => {
     [products, addToCart],
   );
 
-  // التعديل: الانتظار لحد ما الطول يوصل 12 رقم بالظبط
   useEffect(() => {
     const code = barcodeInput.trim();
 
-    // لو الباركود لسه مجابش 12 رقم، مش هيعمل حاجة
     if (code.length < 12) return;
 
-    // بمجرد ما يوصل 12 رقم، هيستنى وقت بسيط جداً (150 ملي ثانية) ويضيفه فوراً
     const timer = setTimeout(() => {
       processBarcode(code);
     }, 150);
@@ -102,12 +99,15 @@ const POSPage = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // التعديل هنا: البحث اليدوي أصبح برقم الباركود بدلاً من الاسم
   const filteredProducts = products.filter((p) => {
     const matchCategory =
       selectedCategory === "all" || p.category === selectedCategory;
-    const matchSearch = p.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
+
+    // تأمين الكود لو المنتج ملوش باركود، ومقارنة الباركود بنص البحث
+    const safeBarcode = p.barcode ? String(p.barcode) : "";
+    const matchSearch = safeBarcode.includes(searchQuery.trim());
+
     return matchCategory && matchSearch;
   });
 
@@ -120,8 +120,9 @@ const POSPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="relative">
               <Search className="absolute right-3 top-3 h-5 w-5 text-muted-foreground" />
+              {/* التعديل هنا: تغيير النص الإرشادي ليتناسب مع البحث بالباركود */}
               <Input
-                placeholder="ابحث يدوياً بالاسم..."
+                placeholder="ابحث يدوياً برقم الباركود..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pr-10 h-12 text-base rounded-xl border-primary/20 focus:border-primary"
