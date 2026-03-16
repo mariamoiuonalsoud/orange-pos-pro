@@ -15,12 +15,10 @@ import CartPanel from "@/components/CartPanel";
 import POSHeader from "@/components/POSHeader";
 
 const POSPage = () => {
-  // ضفنا cartCount و cartTotal عشان نستخدمهم في زرار الموبايل
   const { products, addToCart, cartCount, cartTotal } = usePOS();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // State جديد عشان يفتح السلة على الموبايل
   const [showMobileCart, setShowMobileCart] = useState(false);
 
   // --- إعدادات الباركود سكنر ---
@@ -29,9 +27,13 @@ const POSPage = () => {
 
   const handleBarcodeScan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!barcodeInput.trim()) return;
+    const scannedCode = barcodeInput.trim();
+    if (!scannedCode) return;
 
-    const scannedProduct = products.find((p) => p.id === barcodeInput.trim());
+    // التعديل هنا: البحث في حقل الباركود بدلاً من الـ ID وتحويل الطرفين لنص
+    const scannedProduct = products.find(
+      (p) => String(p.barcode) === String(scannedCode),
+    );
 
     if (scannedProduct) {
       if (scannedProduct.stock > 0) {
@@ -48,7 +50,7 @@ const POSPage = () => {
       setBarcodeInput("");
     } else {
       toast.error("منتج غير معروف", {
-        description: `الباركود ${barcodeInput} غير مسجل بالنظام`,
+        description: `الباركود ${scannedCode} غير مسجل بالنظام`,
         style: { border: "2px solid #ef4444" },
       });
       setBarcodeInput("");
