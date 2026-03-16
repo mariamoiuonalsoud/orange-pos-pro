@@ -1,4 +1,10 @@
-import React, { useState, useRef, forwardRef } from "react";
+import React, {
+  useState,
+  useRef,
+  forwardRef,
+  useEffect,
+  useCallback,
+} from "react";
 import { usePOS, SaleWithCustomer } from "@/contexts/POSContext";
 import { useAuth } from "@/contexts/AuthContext";
 import POSHeader from "@/components/POSHeader";
@@ -9,9 +15,12 @@ import {
   Calendar,
   Banknote,
   Printer,
+  Search,
+  Barcode as BarcodeIcon,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import Barcode from "react-barcode";
+import { Input } from "@/components/ui/input"; // تأكدي إن المسار ده صح عندك
 
 // --- مكون الفاتورة المخفي المخصص للطباعة (نفس تصميم الفاتورة الأصلية) ---
 interface ReceiptProps {
@@ -158,6 +167,12 @@ const ReportsPage = () => {
   const [saleToPrint, setSaleToPrint] = useState<SaleWithCustomer | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
 
+  // --- حالات البحث الجديدة ---
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [receiptSearchQuery, setReceiptSearchQuery] = useState("");
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+
+  // حساب الإجماليات
   const totalSalesAmount = sales.reduce((sum, s) => sum + s.total, 0);
   const totalRevenueBase = totalSalesAmount / 1.15;
 
@@ -166,14 +181,49 @@ const ReportsPage = () => {
     documentTitle: saleToPrint?.receiptNumber || "receipt",
   });
 
-  // دالة تشغيل الطباعة
   const triggerPrint = (sale: SaleWithCustomer) => {
     setSaleToPrint(sale);
-    // ننتظر قليلاً لضمان تحديث حالة المكون المخفي قبل بدء الطباعة
     setTimeout(() => {
       handlePrintAction();
     }, 100);
   };
+
+  // --- منطق الفلترة ---
+  const filteredSales = sales.filter((sale) => {
+    // 1. فلترة بالعميل (الاسم أو التليفون)
+    const matchCustomer =
+      customerSearchQuery === "" ||
+      (sale.customerName?.toLowerCase() || "").includes(
+        customerSearchQuery.toLowerCase(),
+      ) ||
+      (sale.customerPhone || "").includes(customerSearchQuery);
+
+    // 2. فلترة برقم الفاتورة (الباركود)
+    const matchReceipt =
+      receiptSearchQuery === "" ||
+      (sale.receiptNumber || "")
+        .toLowerCase()
+        .includes(receiptSearchQuery.toLowerCase().trim());
+
+    return matchCustomer && matchReceipt;
+  });
+
+  // --- تركيز تلقائي على حقل الباركود عشان الكاشير يقدر يعمل Scan على طول ---
+  useEffect(() => {
+    const keepFocus = () => {
+      // نتأكد إننا مش بنكتب في حقل العميل عشان منسحبش منه الـ Focus
+      if (
+        document.activeElement !== document.getElementById("customer-search") &&
+        receiptInputRef.current
+      ) {
+        receiptInputRef.current.focus();
+      }
+    };
+
+    // مش هنشغل التركيز التلقائي القوي زي صفحة الـ POS عشان نسمح بالبحث بالعميل براحتنا،
+    // بس هنركز عليه أول ما الصفحة تفتح.
+    keepFocus();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -219,12 +269,42 @@ const ReportsPage = () => {
           </div>
         </div>
 
+        {/* --- قسم أدوات البحث الجديد --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* بحث العميل */}
+          <div className="relative">
+            <Search className="absolute right-3 top-3.5 h-5 w-5 text-muted-foreground" />
+            <Input
+              id="customer-search"
+              placeholder="ابحث باسم العميل أو رقم الهاتف..."
+              value={customerSearchQuery}
+              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+              className="pr-10 h-12 text-base rounded-xl border-primary/20 focus:border-primary"
+            />
+          </div>
+
+          {/* بحث الفاتورة (باركود) */}
+          <div className="relative">
+            <BarcodeIcon className="absolute right-3 top-3.5 h-5 w-5 text-primary" />
+            <Input
+              ref={receiptInputRef}
+              placeholder="مرر باركود الفاتورة هنا (أو ابحث برقمها)..."
+              value={receiptSearchQuery}
+              onChange={(e) => setReceiptSearchQuery(e.target.value)}
+              className="pr-10 h-12 text-base rounded-xl border-2 border-primary/50 focus:border-primary bg-primary/5 font-mono"
+            />
+          </div>
+        </div>
+
         {/* سجل الفواتير */}
         <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
-          <div className="p-4 border-b bg-muted/30">
+          <div className="p-4 border-b bg-muted/30 flex justify-between items-center">
             <h2 className="font-bold flex items-center gap-2 text-sm">
               <Calendar className="w-4 h-4" /> مراجعة فواتير المشترين
             </h2>
+            <span className="text-xs text-muted-foreground">
+              يتم عرض {filteredSales.length} فاتورة
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
@@ -239,44 +319,55 @@ const ReportsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {sales.map((sale) => (
-                  <tr
-                    key={sale.id}
-                    className="border-t border-border hover:bg-muted/10 transition-colors"
-                  >
-                    <td className="p-4 font-mono font-bold text-xs">
-                      {sale.receiptNumber}
-                    </td>
-                    <td className="p-4">
-                      <div className="font-bold">
-                        {sale.customerName || "عميل نقدي"}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {sale.customerPhone || "بدون هاتف"}
-                      </div>
-                    </td>
-                    <td className="p-4 font-bold text-primary">
-                      {sale.total.toFixed(2)} ج.م
-                    </td>
-                    <td className="p-4 text-xs font-bold text-muted-foreground">
-                      {sale.paymentMethod === "cash"
-                        ? "نقداً"
-                        : "بطاقة / محفظة"}
-                    </td>
-                    <td className="p-4 text-[10px]">
-                      {new Date(sale.date).toLocaleString("ar-EG")}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => triggerPrint(sale)}
-                        className="inline-flex items-center justify-center p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
-                        title="طباعة الفاتورة"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </button>
+                {filteredSales.length > 0 ? (
+                  filteredSales.map((sale) => (
+                    <tr
+                      key={sale.id}
+                      className="border-t border-border hover:bg-muted/10 transition-colors"
+                    >
+                      <td className="p-4 font-mono font-bold text-xs">
+                        {sale.receiptNumber}
+                      </td>
+                      <td className="p-4">
+                        <div className="font-bold">
+                          {sale.customerName || "عميل نقدي"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {sale.customerPhone || "بدون هاتف"}
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-primary">
+                        {sale.total.toFixed(2)} ج.م
+                      </td>
+                      <td className="p-4 text-xs font-bold text-muted-foreground">
+                        {sale.paymentMethod === "cash"
+                          ? "نقداً"
+                          : "بطاقة / محفظة"}
+                      </td>
+                      <td className="p-4 text-[10px]">
+                        {new Date(sale.date).toLocaleString("ar-EG")}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => triggerPrint(sale)}
+                          className="inline-flex items-center justify-center p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
+                          title="طباعة الفاتورة"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="p-8 text-center text-muted-foreground"
+                    >
+                      لا توجد فواتير مطابقة للبحث
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
