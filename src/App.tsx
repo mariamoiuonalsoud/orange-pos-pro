@@ -13,7 +13,8 @@ import CustomersPage from "./pages/CustomersPage";
 import ReportsPage from "./pages/ReportsPage";
 import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
-import AnalyticsPage from "./pages/AnalyticsPage"; // الاستيراد موجود وجاهز
+import AnalyticsPage from "./pages/AnalyticsPage";
+import QuotationsPage from "./pages/QuotationsPage"; // استيراد صفحة عروض الأسعار
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,17 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* مسار عروض الأسعار (متاح للأدمن والكاشير) */}
+      <Route
+        path="/quotations"
+        element={
+          <ProtectedRoute>
+            <QuotationsPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/dashboard"
         element={
@@ -90,8 +102,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* 🌟 إضافة مسار التحليلات المتقدمة (للأدمن فقط) 🌟 */}
       <Route
         path="/analytics"
         element={

@@ -1,5 +1,5 @@
 import React, { useState, useRef, forwardRef } from "react";
-import { usePOS, SaleWithCustomer } from "@/contexts/POSContext";
+import { usePOS, SaleWithCustomer, SaleItem } from "@/contexts/POSContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,29 +12,31 @@ import {
   Banknote,
   CheckCircle,
   X,
-  User,
-  Phone,
   Printer,
+  FileText,
+  Percent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import Barcode from "react-barcode";
-import logo from "@/assets/orange-group-logo.png";
 
-// --- مكون الفاتورة (Receipt) المخصص للطباعة ---
+// --- مكون الفاتورة المخصص للطباعة (يدعم الخصم) ---
 interface ReceiptProps {
   sale: SaleWithCustomer | null;
   cashierName: string;
+  isQuotation?: boolean;
 }
 
 const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
-  ({ sale, cashierName }, ref) => {
-    if (!sale || !sale.items) return null; // تأمين إضافي عشان الـ map ميضربش
+  ({ sale, cashierName, isQuotation }, ref) => {
+    if (!sale || !sale.items) return null;
 
-    const tax = sale.total - sale.total / 1.15;
-    const subtotal = sale.total / 1.15;
+    const discount = sale.discountAmount || 0;
+    const amountAfterDiscount = sale.total / 1.15; // المبلغ قبل الضريبة وبعد الخصم
+    const subtotal = amountAfterDiscount + discount; // المبلغ الأصلي قبل كل شيء
+    const tax = amountAfterDiscount * 0.15;
 
     return (
       <div
@@ -43,7 +45,9 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
         dir="rtl"
       >
         <div className="text-center border-b border-black pb-2 mb-3">
-          <h2 className="text-lg font-bold">ORANGE GROUP</h2>
+          <h2 className="text-lg font-bold">
+            {isQuotation ? "عرض سعر" : "ORANGE GROUP"}
+          </h2>
           <p className="text-[10px]">فرع المقطم | هاتف: 01107288930</p>
           <p className="text-[10px] mt-1">
             {new Date(sale.date).toLocaleString("ar-EG")}
@@ -52,7 +56,7 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
 
         <div className="mb-3 text-[11px] space-y-1">
           <p>
-            رقم الفاتورة:{" "}
+            {isQuotation ? "رقم العرض" : "رقم الفاتورة"}:{" "}
             <span className="font-bold">{sale.receiptNumber}</span>
           </p>
           <p>
@@ -60,9 +64,6 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           </p>
           <p>
             العميل: <span className="font-bold">{sale.customerName}</span>
-          </p>
-          <p>
-            الهاتف: <span className="font-bold">{sale.customerPhone}</span>
           </p>
         </div>
 
@@ -89,9 +90,15 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
 
         <div className="text-[12px] space-y-1 mb-4">
           <div className="flex justify-between">
-            <span>المجموع:</span>
+            <span>المجموع الفرعي:</span>
             <span>{subtotal.toFixed(2)} ج.م</span>
           </div>
+          {discount > 0 && (
+            <div className="flex justify-between text-red-600 font-bold">
+              <span>الخصم:</span>
+              <span>-{discount.toFixed(2)} ج.م</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>الضريبة (15%):</span>
             <span>{tax.toFixed(2)} ج.م</span>
@@ -100,19 +107,6 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
             <span>الإجمالي النهائي:</span>
             <span>{sale.total.toFixed(2)} ج.م</span>
           </div>
-
-          {sale.paymentMethod === "cash" && (
-            <div className="mt-2 border-t border-dashed border-black pt-2">
-              <div className="flex justify-between">
-                <span>المدفوع نقداً:</span>
-                <span>{sale.amountPaid?.toFixed(2)} ج.م</span>
-              </div>
-              <div className="flex justify-between font-bold">
-                <span>الباقي:</span>
-                <span>{sale.changeDue?.toFixed(2)} ج.م</span>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="flex flex-col items-center gap-2">
@@ -122,20 +116,22 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
             height={40}
             fontSize={10}
           />
-          <p className="text-[10px] font-bold mt-2 text-center">
-            شكراً لزيارتكم! Orange Group
+          <p className="text-[10px] font-bold mt-2 text-center italic">
+            {isQuotation
+              ? "هذا العرض صالح لمدة 7 أيام فقط"
+              : "شكراً لزيارتكم! Orange Group"}
           </p>
         </div>
-
-        <style type="text/css" media="print">
-          {`@page { size: 80mm auto; margin: 0; } body { margin: 0; padding: 5mm; }`}
-        </style>
+        <style
+          type="text/css"
+          media="print"
+        >{`@page { size: 80mm auto; margin: 0; } body { padding: 5mm; }`}</style>
       </div>
     );
   },
 );
+ReceiptToPrint.displayName = "ReceiptToPrint";
 
-// --- المكون الرئيسي للسلة (CartPanel) ---
 const CartPanel = () => {
   const {
     cart,
@@ -143,6 +139,7 @@ const CartPanel = () => {
     clearCart,
     cartTotal,
     completeSale,
+    saveQuotation,
     findCustomerByPhone,
   } = usePOS();
   const { user } = useAuth();
@@ -151,27 +148,26 @@ const CartPanel = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentSale, setCurrentSale] = useState<SaleWithCustomer | null>(null);
+  const [isQuotationType, setIsQuotationType] = useState(false);
+
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [discount, setDiscount] = useState<string>("0"); // لتسهيل إدخال الأرقام
   const [isExisting, setIsExisting] = useState(false);
   const [showCashInput, setShowCashInput] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false); // لتعطيل الأزرار أثناء البيع
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const tax = cartTotal * 0.15;
-  const grandTotal = cartTotal + tax;
+  // حسابات الأسعار والخصم
+  const discountVal = parseFloat(discount) || 0;
+  const amountAfterDiscount = Math.max(0, cartTotal - discountVal);
+  const tax = amountAfterDiscount * 0.15;
+  const grandTotal = amountAfterDiscount + tax;
   const changeDue = parseFloat(cashReceived) - grandTotal;
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: currentSale?.receiptNumber || "receipt",
-    pageStyle: `
-    @page { size: 80mm 80mm; margin: 0 !important; }
-    @media print {
-      body { width: 80mm !important; margin: 0 !important; display: flex; justify-content: center; align-items: center; padding: 0 !important; -webkit-print-color-adjust: exact; }
-      * { overflow: visible !important; }
-    }
-  `,
   });
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,32 +178,71 @@ const CartPanel = () => {
       if (c) {
         setCustomerName(c.name);
         setIsExisting(true);
-        toast.success(`تم التعرف على العميل: ${c.name}`);
       }
-    } else {
-      if (isExisting) {
-        setCustomerName("");
-        setIsExisting(false);
-      }
+    } else if (isExisting) {
+      setCustomerName("");
+      setIsExisting(false);
     }
   };
 
-  // --- تحديث دالة البيع لتكون Async وتنتظر الداتابيز ---
-  const processSale = async (method: "cash" | "card" | "mobile") => {
-    if (!user || isProcessing) return;
-
-    const phoneRegex = /^01[0125][0-9]{8}$/;
-    if (!phoneRegex.test(phone)) {
-      toast.error("خطأ في رقم الهاتف!", {
-        description: "يجب إدخال 11 رقم يبدأ بـ 01",
-      });
-      return;
+  const validateInputs = () => {
+    if (!/^01[0125][0-9]{8}$/.test(phone)) {
+      toast.error("رقم هاتف غير صحيح");
+      return false;
     }
-
     if (!customerName.trim()) {
-      toast.error("اسم العميل مطلوب!");
-      return;
+      toast.error("اسم العميل مطلوب");
+      return false;
     }
+    return true;
+  };
+
+  // --- حفظ عرض السعر (تم إصلاح الـ any هنا) ---
+  const handleQuotation = async () => {
+    if (!validateInputs() || isProcessing) return;
+    setIsProcessing(true);
+
+    const success = await saveQuotation(
+      user?.id || "admin",
+      phone,
+      customerName,
+      discountVal,
+    );
+
+    if (success) {
+      const receiptNum = `QUO-${Date.now().toString(36).toUpperCase()}`;
+
+      // إنشاء كائن SaleItem متوافق بدلاً من استخدام any
+      const saleItems: SaleItem[] = cart.map((item) => ({
+        ...item,
+        returned_quantity: 0,
+      }));
+
+      const quoData: SaleWithCustomer = {
+        id: "temp",
+        receiptNumber: receiptNum,
+        items: saleItems,
+        total: grandTotal,
+        date: new Date().toISOString(),
+        paymentMethod: "cash",
+        cashierId: user?.id || "",
+        customerPhone: phone,
+        customerName: customerName,
+        discountAmount: discountVal,
+        status: "completed",
+      };
+
+      setCurrentSale(quoData);
+      setIsQuotationType(true);
+      setShowSuccess(true);
+      resetForm();
+    }
+    setIsProcessing(false);
+  };
+
+  // --- عملية البيع الفعلي ---
+  const processSale = async (method: "cash" | "card" | "mobile") => {
+    if (!validateInputs() || isProcessing) return;
 
     if (method === "cash") {
       if (!showCashInput) {
@@ -220,32 +255,33 @@ const CartPanel = () => {
       }
     }
 
-    try {
-      setIsProcessing(true);
-      // إتمام العملية وانتظار النتيجة من السيرفر
-      const sale = await completeSale(
-        method,
-        user.id,
-        phone,
-        customerName,
-        method === "cash" ? parseFloat(cashReceived) : grandTotal,
-        changeDue > 0 ? changeDue : 0,
-      );
+    setIsProcessing(true);
+    const sale = await completeSale(
+      method,
+      user?.id || "admin",
+      phone,
+      customerName,
+      method === "cash" ? parseFloat(cashReceived) : grandTotal,
+      changeDue > 0 ? changeDue : 0,
+      discountVal,
+    );
 
-      if (sale) {
-        setCurrentSale(sale);
-        setShowSuccess(true);
-        setShowCheckout(false);
-        setShowCashInput(false);
-        setPhone("");
-        setCustomerName("");
-        setCashReceived("");
-      }
-    } catch (error) {
-      toast.error("فشلت عملية البيع، يرجى المحاولة مرة أخرى");
-    } finally {
-      setIsProcessing(false);
+    if (sale) {
+      setCurrentSale(sale);
+      setIsQuotationType(false);
+      setShowSuccess(true);
+      resetForm();
     }
+    setIsProcessing(false);
+  };
+
+  const resetForm = () => {
+    setShowCheckout(false);
+    setShowCashInput(false);
+    setPhone("");
+    setCustomerName("");
+    setCashReceived("");
+    setDiscount("0");
   };
 
   return (
@@ -257,14 +293,14 @@ const CartPanel = () => {
         {cart.length > 0 && (
           <button
             onClick={clearCart}
-            className="text-xs text-destructive hover:font-bold"
+            className="text-xs text-destructive hover:underline"
           >
             مسح الكل
           </button>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20">
             <ShoppingBag className="w-20 h-20" />
@@ -307,12 +343,31 @@ const CartPanel = () => {
 
       {cart.length > 0 && (
         <div className="p-4 bg-muted/10 border-t space-y-3">
-          <div className="space-y-1 text-sm">
+          {/* حقل الخصم */}
+          <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
+              <Percent className="w-4 h-4" /> الخصم (ج.م):
+            </div>
+            <Input
+              type="number"
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value)}
+              className="w-24 h-8 text-center font-bold bg-white border-blue-200"
+            />
+          </div>
+
+          <div className="space-y-1 text-sm font-bold">
             <div className="flex justify-between">
               <span>المجموع الفرعي</span>
               <span>{cartTotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
+            {discountVal > 0 && (
+              <div className="flex justify-between text-red-600">
+                <span>الخصم</span>
+                <span>-{discountVal.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>الضريبة (15%)</span>
               <span>{tax.toFixed(2)}</span>
             </div>
@@ -325,16 +380,14 @@ const CartPanel = () => {
           {!showCheckout ? (
             <Button
               onClick={() => setShowCheckout(true)}
-              className="w-full h-14 text-lg font-bold rounded-xl shadow-lg"
+              className="w-full h-14 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-95"
             >
-              الدفع
+              إتمام العملية
             </Button>
           ) : (
             <div className="space-y-4 p-4 bg-background rounded-2xl border-2 border-primary/20 shadow-xl">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-primary italic">
-                  بيانات العميل وطريقة الدفع
-                </span>
+              <div className="flex justify-between items-center text-xs font-bold text-primary italic">
+                <span>بيانات العميل وطريقة الدفع</span>
                 <X
                   className="w-5 h-5 cursor-pointer text-muted-foreground"
                   onClick={() => setShowCheckout(false)}
@@ -342,75 +395,66 @@ const CartPanel = () => {
               </div>
 
               {!showCashInput ? (
-                <>
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="رقم الموبايل (11 رقم)"
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      dir="ltr"
-                      maxLength={11}
-                      className="h-11 border-primary/30"
-                    />
-                    <Input
-                      placeholder="اسم العميل"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      disabled={isExisting}
-                      className={`h-11 ${isExisting ? "bg-success/10 border-success text-success font-bold" : "border-primary/30"}`}
-                    />
+                <div className="space-y-2">
+                  <Input
+                    placeholder="رقم الموبايل"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    maxLength={11}
+                    className="h-11 border-primary/30"
+                  />
+                  <Input
+                    placeholder="اسم العميل"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    disabled={isExisting}
+                    className={`h-11 ${isExisting ? "bg-green-50" : ""}`}
+                  />
+                  <div className="grid grid-cols-1 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleQuotation}
+                      className="h-12 border-blue-500 text-blue-600 font-bold gap-2 hover:bg-blue-50"
+                    >
+                      <FileText className="w-4 h-4" /> حفظ كعرض سعر
+                    </Button>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        onClick={() => processSale("cash")}
+                        className="bg-green-600 h-16 flex-col gap-1 hover:bg-green-700"
+                      >
+                        <Banknote className="w-5 h-5" />
+                        نقداً
+                      </Button>
+                      <Button
+                        onClick={() => processSale("card")}
+                        className="bg-blue-600 h-16 flex-col gap-1 hover:bg-blue-700"
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        بطاقة
+                      </Button>
+                      <Button
+                        onClick={() => processSale("mobile")}
+                        className="bg-slate-800 h-16 flex-col gap-1 hover:bg-black"
+                      >
+                        <Smartphone className="w-5 h-5" />
+                        محفظة
+                      </Button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      disabled={isProcessing}
-                      onClick={() => processSale("cash")}
-                      className="bg-success hover:bg-green-600 h-16 flex-col gap-1"
-                    >
-                      <Banknote className="w-5 h-5" />
-                      <span className="text-[10px]">نقداً</span>
-                    </Button>
-                    <Button
-                      disabled={isProcessing}
-                      onClick={() => processSale("card")}
-                      className="bg-blue-600 hover:bg-blue-700 h-16 flex-col gap-1"
-                    >
-                      <CreditCard className="w-5 h-5" />
-                      <span className="text-[10px]">بطاقة</span>
-                    </Button>
-                    <Button
-                      disabled={isProcessing}
-                      onClick={() => processSale("mobile")}
-                      className="bg-slate-800 hover:bg-black h-16 flex-col gap-1"
-                    >
-                      <Smartphone className="w-5 h-5" />
-                      <span className="text-[10px]">محفظة</span>
-                    </Button>
-                  </div>
-                </>
+                </div>
               ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-4 py-2"
-                >
-                  <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 text-center">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      المبلغ الإجمالي
-                    </p>
-                    <p className="text-2xl font-black text-primary">
-                      {grandTotal.toFixed(2)} ج.م
-                    </p>
-                  </div>
+                <div className="space-y-4 py-2">
                   <Input
                     type="number"
                     placeholder="المبلغ المستلم..."
                     value={cashReceived}
                     onChange={(e) => setCashReceived(e.target.value)}
-                    className="h-14 text-center text-2xl font-bold border-2 border-success/50"
+                    className="h-14 text-center text-2xl font-bold border-2 border-green-500/50"
                     autoFocus
                   />
                   {changeDue >= 0 && (
-                    <div className="p-3 bg-success text-white text-center rounded-xl font-black text-lg animate-bounce">
+                    <div className="p-3 bg-green-600 text-white text-center rounded-xl font-black text-lg">
                       الباقي: {changeDue.toFixed(2)} ج.م
                     </div>
                   )}
@@ -424,13 +468,13 @@ const CartPanel = () => {
                     </Button>
                     <Button
                       disabled={isProcessing}
-                      className="flex-[2] bg-success h-12 font-bold"
+                      className="flex-[2] bg-green-600 h-12 font-bold hover:bg-green-700"
                       onClick={() => processSale("cash")}
                     >
                       {isProcessing ? "جاري الحفظ..." : "تأكيد العملية"}
                     </Button>
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
           )}
@@ -442,19 +486,16 @@ const CartPanel = () => {
         {showSuccess && currentSale && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              className="bg-card p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl relative border border-primary/20"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-card p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl border border-primary/20"
             >
-              <div className="w-20 h-20 bg-success/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-12 h-12 text-success" />
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-12 h-12 text-green-600" />
               </div>
-              <img
-                src={logo}
-                className="w-16 h-16 mx-auto mb-3 object-contain"
-                alt="logo"
-              />
-              <h3 className="text-2xl font-black mb-1">تم البيع بنجاح!</h3>
+              <h3 className="text-2xl font-black mb-1">
+                {isQuotationType ? "تم حفظ العرض!" : "تم البيع بنجاح!"}
+              </h3>
               <p className="text-muted-foreground text-sm mb-6 font-mono">
                 {currentSale.receiptNumber}
               </p>
@@ -463,7 +504,8 @@ const CartPanel = () => {
                   onClick={handlePrint}
                   className="w-full h-14 bg-primary text-white font-black text-xl gap-3 shadow-xl hover:scale-105 transition-transform"
                 >
-                  <Printer className="w-6 h-6" /> طباعة الفاتورة
+                  <Printer className="w-6 h-6" /> طباعة{" "}
+                  {isQuotationType ? "العرض" : "الفاتورة"}
                 </Button>
                 <Button
                   variant="ghost"
@@ -483,6 +525,7 @@ const CartPanel = () => {
           ref={receiptRef}
           sale={currentSale}
           cashierName={user?.name || ""}
+          isQuotation={isQuotationType}
         />
       </div>
     </div>

@@ -10,7 +10,8 @@ import {
   Users,
   BarChart3,
   UserCog,
-  TrendingUp, // 1. استيراد أيقونة التحليلات المتقدمة
+  TrendingUp,
+  FileText, // أيقونة عروض الأسعار
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -21,7 +22,12 @@ const navItems = [
     icon: ShoppingCart,
     roles: ["admin", "cashier"],
   },
-
+  {
+    path: "/quotations", // المسار الجديد
+    label: "عروض الأسعار",
+    icon: FileText,
+    roles: ["admin", "cashier"], // الكاشير يحتاج الوصول إليها لتحويلها لمبيعات
+  },
   {
     path: "/inventory",
     label: "المخزون",
@@ -46,7 +52,6 @@ const navItems = [
     icon: BarChart3,
     roles: ["admin"],
   },
-  // 2. إضافة لينك التحليلات (Analytics) للأدمن
   {
     path: "/analytics",
     label: "التحليلات",
@@ -85,8 +90,7 @@ const POSHeader = () => {
         </div>
 
         {/* Nav */}
-        {/* التعديل هنا: إضافة overflow-x-auto عشان القائمة متكسرش الشاشة في الموبايل لو اللينكات كترت */}
-        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[60%]">
           {navItems
             .filter((item) => user && item.roles.includes(user.role))
             .map((item) => {
