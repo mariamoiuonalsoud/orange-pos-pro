@@ -2,7 +2,6 @@ import React from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import logo from "@/assets/orange-group-logo.png";
-// ضفنا أيقونة UserCog من هنا للموظفين
 import {
   LogOut,
   ShoppingCart,
@@ -11,6 +10,7 @@ import {
   Users,
   BarChart3,
   UserCog,
+  TrendingUp, // 1. استيراد أيقونة التحليلات المتقدمة
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -21,22 +21,44 @@ const navItems = [
     icon: ShoppingCart,
     roles: ["admin", "cashier"],
   },
+
   {
-    path: "/dashboard",
-    label: "لوحة التحكم",
-    icon: LayoutDashboard,
+    path: "/inventory",
+    label: "المخزون",
+    icon: Package,
     roles: ["admin"],
   },
-  { path: "/inventory", label: "المخزون", icon: Package, roles: ["admin"] },
   {
     path: "/customers",
     label: "العملاء",
     icon: Users,
     roles: ["admin", "cashier"],
   },
-  { path: "/reports", label: "التقارير", icon: BarChart3, roles: ["admin"] },
-  // 1. ضفنا لينك إدارة الموظفين هنا وحددنا إن الأدمن بس اللي يشوفه
-  { path: "/users", label: "الموظفين", icon: UserCog, roles: ["admin"] },
+  {
+    path: "/dashboard",
+    label: "لوحة التحكم",
+    icon: LayoutDashboard,
+    roles: ["admin"],
+  },
+  {
+    path: "/reports",
+    label: "التقارير",
+    icon: BarChart3,
+    roles: ["admin"],
+  },
+  // 2. إضافة لينك التحليلات (Analytics) للأدمن
+  {
+    path: "/analytics",
+    label: "التحليلات",
+    icon: TrendingUp,
+    roles: ["admin"],
+  },
+  {
+    path: "/users",
+    label: "الموظفين",
+    icon: UserCog,
+    roles: ["admin"],
+  },
 ];
 
 const POSHeader = () => {
@@ -63,7 +85,8 @@ const POSHeader = () => {
         </div>
 
         {/* Nav */}
-        <nav className="flex items-center gap-1">
+        {/* التعديل هنا: إضافة overflow-x-auto عشان القائمة متكسرش الشاشة في الموبايل لو اللينكات كترت */}
+        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {navItems
             .filter((item) => user && item.roles.includes(user.role))
             .map((item) => {
@@ -73,14 +96,14 @@ const POSHeader = () => {
                   key={item.path}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate(item.path)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center whitespace-nowrap gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
-                  <span className="hidden md:inline">{item.label}</span>
+                  <span className="hidden lg:inline">{item.label}</span>
                 </motion.button>
               );
             })}

@@ -1,5 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner"; // دي المكتبة اللي بنستخدمها للـ Toasts
+import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -13,6 +13,7 @@ import CustomersPage from "./pages/CustomersPage";
 import ReportsPage from "./pages/ReportsPage";
 import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
+import AnalyticsPage from "./pages/AnalyticsPage"; // الاستيراد موجود وجاهز
 
 const queryClient = new QueryClient();
 
@@ -89,6 +90,17 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* 🌟 إضافة مسار التحليلات المتقدمة (للأدمن فقط) 🌟 */}
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute adminOnly>
+            <AnalyticsPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route path="/" element={<Navigate to="/pos" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -99,7 +111,6 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      {/* التعديل هنا: Sonner Toaster مخصص للفت الانتباه */}
       <Sonner
         position="top-center"
         richColors

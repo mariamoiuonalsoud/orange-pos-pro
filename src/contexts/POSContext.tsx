@@ -16,11 +16,18 @@ export interface Customer {
   phone: string;
 }
 
-export interface SaleWithCustomer extends Sale {
+export interface SaleItem extends CartItem {
+  returned_quantity?: number;
+  order_item_id?: string;
+}
+
+export interface SaleWithCustomer extends Omit<Sale, "items"> {
   customerPhone?: string;
   customerName?: string;
   amountPaid?: number;
   changeDue?: number;
+  status?: "completed" | "partially_refunded" | "refunded";
+  items: SaleItem[];
 }
 
 interface POSContextType {
@@ -47,6 +54,12 @@ interface POSContextType {
   addProduct: (product: Omit<Product, "id">) => Promise<boolean>;
   deleteProduct: (productId: string) => Promise<boolean>;
   fetchInitialData: () => Promise<void>;
+  refundItem: (
+    saleId: string,
+    orderItemId: string,
+    productId: string,
+    returnQty: number,
+  ) => Promise<boolean>;
 }
 
 const POSContext = createContext<POSContextType | null>(null);
@@ -57,7 +70,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // دالة جلب البيانات
   const fetchInitialData = async () => {
     try {
       const { data: prods } = await supabase
@@ -72,13 +84,11 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .order("created_at", { ascending: false });
       if (custs) setCustomers(custs);
 
-      // جلب الفواتير
       const { data: ords } = await supabase
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
 
-      // التعديل الجديد: جلب تفاصيل المنتجات المباعة في الفواتير
       const { data: orderItemsData } = await supabase
         .from("order_items")
         .select("*");
@@ -87,17 +97,18 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         const formattedSales: SaleWithCustomer[] = ords.map((o) => {
           const customer = custs?.find((c) => c.id === o.customer_id);
 
-          // تجهيز قائمة المنتجات الخاصة بهذه الفاتورة تحديداً للطباعة
-          const saleItems =
+          const saleItems: SaleItem[] =
             orderItemsData
               ?.filter((item) => item.order_id === o.id)
               .map((item) => {
                 const p = prods?.find((prod) => prod.id === item.product_id);
                 return {
                   id: item.product_id,
+                  order_item_id: item.id,
                   name: p ? p.name : "منتج غير معروف",
                   price: item.unit_price,
                   quantity: item.quantity,
+                  returned_quantity: item.returned_quantity || 0,
                   stock: 0,
                   category: "",
                   image: "📦",
@@ -116,7 +127,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             changeDue: o.change_due,
             customerName: customer ? customer.name : "",
             customerPhone: customer ? customer.phone : "",
-            items: saleItems, // تمرير المنتجات بدلاً من مصفوفة فارغة
+            items: saleItems,
+            status: o.status || "completed",
           };
         });
         setSales(formattedSales);
@@ -204,10 +216,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       if (cartItem.quantity > dbProduct.stock) {
         toast.error(
           `فشلت العملية! كمية "${cartItem.name}" غير متوفرة. المتاح: ${dbProduct.stock}`,
-          {
-            duration: 6000,
-            style: { border: "2px solid #ef4444" },
-          },
+          { duration: 6000, style: { border: "2px solid #ef4444" } },
         );
         return null;
       }
@@ -246,6 +255,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
           cashier_id: cashierId,
           amount_paid: amountPaid,
           change_due: changeDue,
+          status: "completed",
         },
       ])
       .select()
@@ -262,6 +272,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       quantity: item.quantity,
       unit_price: item.price,
       total_price: item.price * item.quantity,
+      returned_quantity: 0,
     }));
     await supabase.from("order_items").insert(orderItems);
 
@@ -282,7 +293,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     const sale: SaleWithCustomer = {
       id: newOrder.id,
       receiptNumber,
-      items: [...cart],
+      items: cart.map((item) => ({ ...item, returned_quantity: 0 })),
       total,
       date: newOrder.created_at,
       paymentMethod,
@@ -291,8 +302,75 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       customerName,
       amountPaid,
       changeDue,
+      status: "completed",
     };
     return sale;
+  };
+
+  const refundItem = async (
+    saleId: string,
+    orderItemId: string,
+    productId: string,
+    returnQty: number,
+  ): Promise<boolean> => {
+    try {
+      const sale = sales.find((s) => s.id === saleId);
+      if (!sale) return false;
+
+      const itemToRefund = sale.items.find(
+        (i) => i.order_item_id === orderItemId,
+      );
+      if (!itemToRefund) return false;
+
+      const newReturnedQty = (itemToRefund.returned_quantity || 0) + returnQty;
+
+      // 1. تحديث الكمية المرتجعة
+      await supabase
+        .from("order_items")
+        .update({ returned_quantity: newReturnedQty })
+        .eq("id", orderItemId);
+
+      // 2. إعادة الكمية للمخزن
+      const { data: productData } = await supabase
+        .from("products")
+        .select("stock")
+        .eq("id", productId)
+        .single();
+
+      if (productData) {
+        await supabase
+          .from("products")
+          .update({ stock: productData.stock + returnQty })
+          .eq("id", productId);
+      }
+
+      // 3. خصم القيمة وتحديث الحالة
+      const refundValue = itemToRefund.price * returnQty * 1.15;
+      const newTotal = sale.total - refundValue;
+
+      const allItemsRefunded = sale.items.every((i) => {
+        if (i.order_item_id === orderItemId)
+          return newReturnedQty === i.quantity;
+        return i.returned_quantity === i.quantity;
+      });
+
+      const newStatus = allItemsRefunded ? "refunded" : "partially_refunded";
+
+      await supabase
+        .from("orders")
+        .update({ total_amount: newTotal, status: newStatus })
+        .eq("id", saleId);
+
+      toast.success(
+        `تم استرجاع عدد ${returnQty} من ${itemToRefund.name} بنجاح!`,
+      );
+      fetchInitialData();
+      return true;
+    } catch (error) {
+      console.error("Partial Refund Error:", error);
+      toast.error("حدث خطأ أثناء الاسترجاع الجزئي!");
+      return false;
+    }
   };
 
   const addProduct = async (p: Omit<Product, "id">): Promise<boolean> => {
@@ -362,6 +440,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         addProduct,
         deleteProduct,
         fetchInitialData,
+        refundItem,
       }}
     >
       {children}
