@@ -28,21 +28,31 @@ export interface SaleWithCustomer extends Omit<Sale, "items"> {
   amountPaid?: number;
   changeDue?: number;
   discountAmount?: number;
+  vatAmount?: number; // مضافة للتقارير
   status?: "completed" | "partially_refunded" | "refunded";
   items: SaleItem[];
+}
+
+export interface QuotationItemDB {
+  quantity: number;
+  products: Product | null;
 }
 
 interface POSContextType {
   products: Product[];
   cart: CartItem[];
   customers: Customer[];
-  sales: SaleWithCustomer[];
+  sales: SaleWithCustomer[]; // البيانات اللي بتغذي التقارير والـ Dashboard
+  cartTotal: number;
+  cartCount: number;
+  cartDiscount: number;
+  setCartDiscount: (val: number) => void;
+  tempCustomer: { name: string; phone: string };
+  setTempCustomer: (val: { name: string; phone: string }) => void;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  cartTotal: number;
-  cartCount: number;
   findCustomerByPhone: (phone: string) => Customer | undefined;
   completeSale: (
     paymentMethod: "cash" | "card" | "mobile",
@@ -59,6 +69,13 @@ interface POSContextType {
     customerName: string,
     discountAmount: number,
   ) => Promise<boolean>;
+  deleteQuotation: (id: string) => Promise<boolean>;
+  loadQuotationToCart: (
+    quoteItems: QuotationItemDB[],
+    name: string,
+    phone: string,
+    discount: number,
+  ) => void;
   updateProduct: (product: Product) => Promise<boolean>;
   addProduct: (product: Omit<Product, "id">) => Promise<boolean>;
   deleteProduct: (productId: string) => Promise<boolean>;
@@ -72,92 +89,61 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartDiscount, setCartDiscount] = useState<number>(0);
+  const [tempCustomer, setTempCustomer] = useState({ name: "", phone: "" });
 
-  // --- 1. دوال السلة ---
-  const clearCart = useCallback(() => setCart([]), []);
-
-  const addToCart = useCallback((product: Product) => {
-    if (product.stock <= 0) {
-      toast.error("المنتج نفذ من المخزن");
-      return;
-    }
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        if (existing.quantity >= product.stock) {
-          toast.error("الكمية المتاحة غير كافية");
-          return prev;
-        }
-        return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-  }, []);
-
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      setCart((prev) => prev.filter((i) => i.id !== productId));
-    } else {
-      setCart((prev) =>
-        prev.map((item) =>
-          item.id === productId ? { ...item, quantity } : item,
-        ),
-      );
-    }
-  }, []);
-
-  const removeFromCart = (productId: string) => updateQuantity(productId, 0);
-
-  // --- 2. جلب البيانات (حل مشكلة السطر 150) ---
-  const fetchInitialData = async () => {
+  // --- 1. جلب البيانات الأساسية (تعديل لضمان ظهور التقارير) ---
+  const fetchInitialData = useCallback(async () => {
     try {
+      // جلب المنتجات والعملاء
       const { data: prods } = await supabase
         .from("products")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("name");
       if (prods) setProducts(prods as Product[]);
 
       const { data: custs } = await supabase.from("customers").select("*");
-      if (custs) setCustomers(custs);
+      if (custs) setCustomers(custs as Customer[]);
 
-      const { data: ords } = await supabase
+      // جلب الطلبات والأصناف للتقارير والـ Dashboard
+      const { data: ords, error: ordError } = await supabase
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
-      const { data: items } = await supabase.from("order_items").select("*");
+
+      const { data: items, error: itemError } = await supabase
+        .from("order_items")
+        .select("*");
+
+      if (ordError || itemError) throw new Error("خطأ في جلب بيانات المبيعات");
 
       if (ords && items) {
-        // قمنا بتعريف النوع صراحة هنا لتجنب formatted as any
         const formatted: SaleWithCustomer[] = ords.map((o) => {
           const customer = custs?.find((c) => c.id === o.customer_id);
           return {
             id: o.id,
             receiptNumber: o.receipt_number,
             total: o.total_amount,
+            vatAmount: o.vat_amount || 0,
             date: o.created_at,
-            paymentMethod: o.payment_method,
+            paymentMethod:
+              (o.payment_method as "cash" | "card" | "mobile") || "cash",
             cashierId: o.cashier_id,
-            amountPaid: o.amount_paid,
-            changeDue: o.change_due,
+            amountPaid: o.amount_paid || 0,
+            changeDue: o.change_due || 0,
             discountAmount: o.discount_amount || 0,
-            customerName: customer?.name || "",
-            customerPhone: customer?.phone || "",
-            status: o.status || "completed",
+            customerName: customer?.name || "عميل عام",
+            customerPhone: customer?.phone || "---",
+            status:
+              (o.status as "completed" | "partially_refunded" | "refunded") ||
+              "completed",
             items: items
               .filter((i) => i.order_id === o.id)
               .map((i) => ({
                 id: i.product_id,
-                order_item_id: i.id,
-                name:
-                  products.find((p) => p.id === i.product_id)?.name ||
-                  "منتج معروف",
+                name: prods?.find((p) => p.id === i.product_id)?.name || "منتج",
                 price: i.unit_price,
                 quantity: i.quantity,
-                returned_quantity: i.returned_quantity || 0,
                 stock: 0,
                 category: "",
                 barcode: "",
@@ -165,77 +151,100 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
               })),
           };
         });
-        setSales(formatted);
+        setSales(formatted); // هنا بنغذي الداتا للـ Dashboard
       }
     } catch (error) {
       console.error("Fetch Error:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchInitialData();
+  }, [fetchInitialData]);
+
+  // --- 2. التحكم في السلة والتحويل ---
+  const clearCart = useCallback(() => {
+    setCart([]);
+    setTempCustomer({ name: "", phone: "" });
+    setCartDiscount(0);
   }, []);
 
-  const findCustomerByPhone = (phone: string) =>
-    customers.find((c) => c.phone === phone);
+  const loadQuotationToCart = useCallback(
+    (
+      quoteItems: QuotationItemDB[],
+      name: string,
+      phone: string,
+      discount: number,
+    ) => {
+      setCart([]);
+      const items: CartItem[] = quoteItems
+        .filter((i) => i.products !== null)
+        .map((i) => ({ ...i.products!, quantity: i.quantity }));
+      setCart(items);
+      setTempCustomer({ name, phone });
+      setCartDiscount(discount);
+    },
+    [],
+  );
 
-  // --- 3. إتمام البيع (حل مشكلة السطر 270) ---
+  const addToCart = useCallback(
+    (p: Product) => {
+      const existing = cart.find((i) => i.id === p.id);
+      if (existing && existing.quantity >= p.stock) {
+        toast.error(`المخزون غير كافٍ. المتاح: ${p.stock}`);
+        return;
+      }
+      setCart((prev) =>
+        existing
+          ? prev.map((i) =>
+              i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i,
+            )
+          : [...prev, { ...p, quantity: 1 }],
+      );
+    },
+    [cart],
+  );
+
+  const updateQuantity = useCallback(
+    (id: string, q: number) => {
+      const p = products.find((prod) => prod.id === id);
+      if (p && q > p.stock) {
+        toast.error("تجاوز المخزن");
+        return;
+      }
+      setCart((prev) =>
+        q <= 0
+          ? prev.filter((i) => i.id !== id)
+          : prev.map((i) => (i.id === id ? { ...i, quantity: q } : i)),
+      );
+    },
+    [products],
+  );
+
   const completeSale = async (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
     customerPhone: string,
     customerName: string,
-    amountPaid: number = 0,
-    changeDue: number = 0,
-    discountAmount: number = 0,
-  ): Promise<SaleWithCustomer | null> => {
-    if (cart.length === 0) return null;
-
+    amountPaid = 0,
+    changeDue = 0,
+    discountAmount = 0,
+  ) => {
     try {
-      let customer_id = null;
+      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+      const vat = (subtotal - discountAmount) * 0.15;
+      const total = subtotal - discountAmount + vat;
 
-      if (
-        customerPhone &&
-        customerPhone !== "-" &&
-        customerPhone.trim() !== ""
-      ) {
-        const existingCust = findCustomerByPhone(customerPhone);
-        if (!existingCust) {
-          const { data: newCust, error: cErr } = await supabase
-            .from("customers")
-            .insert([
-              { name: customerName || "عميل جديد", phone: customerPhone },
-            ])
-            .select()
-            .single();
-          if (!cErr && newCust) {
-            customer_id = newCust.id;
-            setCustomers((prev) => [newCust, ...prev]);
-          }
-        } else {
-          customer_id = existingCust.id;
-        }
-      }
-
-      const cartTotal = cart.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0,
-      );
-      const amountAfterDiscount = cartTotal - discountAmount;
-      const totalFinal = amountAfterDiscount * 1.15;
-      const receiptNumber = `ORG-${Date.now().toString(36).toUpperCase()}`;
-
-      const { data: order, error: oErr } = await supabase
+      const { data: order, error } = await supabase
         .from("orders")
         .insert([
           {
-            receipt_number: receiptNumber,
-            total_amount: totalFinal,
-            vat_amount: amountAfterDiscount * 0.15,
+            receipt_number: `ORG-${Date.now().toString(36).toUpperCase()}`,
+            total_amount: total,
+            vat_amount: vat,
             discount_amount: discountAmount,
             payment_method: paymentMethod,
             cashier_id: cashierId,
-            customer_id: customer_id,
             amount_paid: amountPaid,
             change_due: changeDue,
             status: "completed",
@@ -244,7 +253,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .select()
         .single();
 
-      if (oErr) throw oErr;
+      if (error) throw error;
 
       for (const item of cart) {
         await supabase.from("order_items").insert([
@@ -256,50 +265,90 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             total_price: item.price * item.quantity,
           },
         ]);
-
-        const currentProd = products.find((p) => p.id === item.id);
-        if (currentProd) {
+        const p = products.find((prod) => prod.id === item.id);
+        if (p)
           await supabase
             .from("products")
-            .update({ stock: currentProd.stock - item.quantity })
+            .update({ stock: p.stock - item.quantity })
             .eq("id", item.id);
-        }
       }
 
-      const finalSale: SaleWithCustomer = {
+      clearCart();
+      await fetchInitialData(); // تحديث المبيعات فوراً لتظهر في Dashboard
+      return {
         ...order,
-        receiptNumber,
-        items: cart.map((i) => ({ ...i, returned_quantity: 0 })),
-        total: totalFinal,
-        customerName: customerName || (customer_id ? "عميل مسجل" : "عميل نقدي"),
+        items: cart as SaleItem[],
+        customerName,
         customerPhone,
+        total,
         date: order.created_at,
       };
-
-      setSales((prev) => [finalSale, ...prev]);
-      clearCart();
-      fetchInitialData();
-      toast.success("تم تسجيل العملية والعميل بنجاح");
-      return finalSale;
     } catch (e) {
-      // حل مشكلة e: any عن طريق تحويل النوع يدوياً
-      const error = e as Error;
-      toast.error("خطأ: " + error.message);
+      toast.error("خطأ في إتمام البيع");
       return null;
     }
   };
 
+  const saveQuotation = async (
+    cid: string,
+    cp: string,
+    cn: string,
+    da: number,
+  ) => {
+    try {
+      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+      const vat = (subtotal - da) * 0.15;
+      const { data: quo, error } = await supabase
+        .from("quotations")
+        .insert([
+          {
+            receipt_number: `QUO-${Date.now().toString(36).toUpperCase()}`,
+            total_amount: subtotal - da + vat,
+            vat_amount: vat,
+            discount_amount: da,
+            status: "pending",
+          },
+        ])
+        .select()
+        .single();
+      if (error) return false;
+      await supabase.from("quotation_items").insert(
+        cart.map((i) => ({
+          quotation_id: quo.id,
+          product_id: i.id,
+          quantity: i.quantity,
+          unit_price: i.price,
+          total_price: i.price * i.quantity,
+        })),
+      );
+      clearCart();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const deleteQuotation = async (id: string) => {
+    const { error } = await supabase.from("quotations").delete().eq("id", id);
+    if (!error) toast.success("تم الحذف");
+    return !error;
+  };
+
+  const updateProduct = async (p: Product) => {
+    const { error } = await supabase.from("products").update(p).eq("id", p.id);
+    if (!error) await fetchInitialData();
+    return !error;
+  };
+
   const addProduct = async (p: Omit<Product, "id">) => {
-    const { image, ...data } = p;
-    const { error } = await supabase.from("products").insert([data]);
-    if (error) return false;
-    fetchInitialData();
-    return true;
+    const { error } = await supabase.from("products").insert([p]);
+    if (!error) await fetchInitialData();
+    return !error;
   };
 
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from("products").delete().eq("id", id);
-    if (!error) fetchInitialData();
+    if (!error) await fetchInitialData();
     return !error;
   };
 
@@ -310,19 +359,25 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         cart,
         customers,
         sales,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
+        cartDiscount,
+        setCartDiscount,
+        tempCustomer,
+        setTempCustomer,
         cartTotal: cart.reduce((s, i) => s + i.price * i.quantity, 0),
         cartCount: cart.reduce((s, i) => s + i.quantity, 0),
-        findCustomerByPhone,
+        addToCart,
+        removeFromCart: (id) => updateQuantity(id, 0),
+        updateQuantity,
+        clearCart,
+        findCustomerByPhone: (p) => customers.find((c) => c.phone === p),
         completeSale,
+        saveQuotation,
+        deleteQuotation,
+        loadQuotationToCart,
+        updateProduct,
         addProduct,
         deleteProduct,
         fetchInitialData,
-        saveQuotation: async () => true,
-        updateProduct: async () => true,
       }}
     >
       {children}
@@ -330,8 +385,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const usePOS = () => {
-  const ctx = useContext(POSContext);
-  if (!ctx) throw new Error("usePOS error");
-  return ctx;
-};
+export function usePOS() {
+  const context = useContext(POSContext);
+  if (!context) throw new Error("usePOS error");
+  return context;
+}

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { usePOS, SaleWithCustomer } from "@/contexts/POSContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,7 +10,6 @@ import {
   Smartphone,
   Banknote,
   CheckCircle,
-  X,
   Printer,
   FileText,
   Percent,
@@ -30,14 +29,19 @@ const CartPanel = () => {
     completeSale,
     saveQuotation,
     findCustomerByPhone,
+    // استدعاء بيانات التحويل من الـ Context
+    tempCustomer,
+    cartDiscount,
+    setTempCustomer,
+    setCartDiscount,
   } = usePOS();
+
   const { user } = useAuth();
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [currentSale, setCurrentSale] = useState<SaleWithCustomer | null>(null);
-  const [isQuotationType, setIsQuotationType] = useState(false);
 
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -46,17 +50,37 @@ const CartPanel = () => {
   const [cashReceived, setCashReceived] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // --- التأثير التلقائي: ملء بيانات العميل والخصم عند التحويل من عرض سعر ---
+  useEffect(() => {
+    if (tempCustomer.phone || tempCustomer.name) {
+      setPhone(tempCustomer.phone);
+      setCustomerName(tempCustomer.name);
+      setDiscount(cartDiscount.toString());
+      setShowCheckout(true); // فتح واجهة الدفع تلقائياً
+      toast.info("تم استيراد بيانات العميل والخصم من عرض السعر");
+    }
+  }, [tempCustomer, cartDiscount]);
+
+  // الحسابات المالية (VAT 15%)
   const discountVal = Math.max(0, parseFloat(discount) || 0);
   const amountAfterDiscount = Math.max(0, cartTotal - discountVal);
-  const tax = amountAfterDiscount * 0.15;
-  const grandTotal = amountAfterDiscount + tax;
-
+  const vatAmount = amountAfterDiscount * 0.15;
+  const grandTotal = amountAfterDiscount + vatAmount;
   const changeDue = (parseFloat(cashReceived) || 0) - grandTotal;
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: currentSale?.receiptNumber || "receipt",
   });
+
+  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (parseFloat(val) < 0) {
+      setDiscount("0");
+    } else {
+      setDiscount(val);
+    }
+  };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -68,7 +92,10 @@ const CartPanel = () => {
   };
 
   const processSale = async (method: "cash" | "card" | "mobile") => {
-    if (!phone || !customerName || isProcessing) return;
+    if (!phone || !customerName || isProcessing) {
+      toast.error("برجاء إدخال بيانات العميل أولاً");
+      return;
+    }
     if (
       method === "cash" &&
       (!showCashInput || parseFloat(cashReceived) < grandTotal)
@@ -90,10 +117,25 @@ const CartPanel = () => {
 
     if (sale) {
       setCurrentSale(sale);
-      setIsQuotationType(false);
       setShowSuccess(true);
       resetForm();
     }
+    setIsProcessing(false);
+  };
+
+  const handleSaveQuotation = async () => {
+    if (!phone || !customerName) {
+      toast.error("بيانات العميل مطلوبة لحفظ عرض السعر");
+      return;
+    }
+    setIsProcessing(true);
+    const success = await saveQuotation(
+      user?.id || "admin",
+      phone,
+      customerName,
+      discountVal,
+    );
+    if (success) resetForm();
     setIsProcessing(false);
   };
 
@@ -104,17 +146,27 @@ const CartPanel = () => {
     setCustomerName("");
     setCashReceived("");
     setDiscount("0");
+    // تنظيف البيانات المؤقتة في الـ Context
+    setTempCustomer({ name: "", phone: "" });
+    setCartDiscount(0);
   };
 
   return (
-    <div className="w-full lg:w-96 bg-card border-r border-border flex flex-col h-full shadow-2xl relative">
+    <div
+      className="w-full lg:w-96 bg-card border-r border-border flex flex-col h-full shadow-2xl relative text-right"
+      dir="rtl"
+    >
+      {/* الهيدر */}
       <div className="p-4 border-b flex justify-between items-center bg-muted/20">
-        <h2 className="font-bold flex items-center gap-2">
+        <h2 className="font-bold flex items-center gap-2 text-foreground">
           <ShoppingBag className="w-5 h-5 text-primary" /> السلة
         </h2>
         {cart.length > 0 && (
           <button
-            onClick={clearCart}
+            onClick={() => {
+              clearCart();
+              resetForm();
+            }}
             className="text-xs text-destructive hover:underline"
           >
             مسح الكل
@@ -122,6 +174,7 @@ const CartPanel = () => {
         )}
       </div>
 
+      {/* قائمة المنتجات */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
         {cart.map((item) => (
           <div
@@ -138,52 +191,56 @@ const CartPanel = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                className="p-1 rounded-md bg-background"
+                className="p-1 rounded-md bg-background hover:bg-muted transition-colors"
               >
-                <Minus className="w-4 h-4" />
+                <Minus size={14} />
               </button>
-              <span className="font-bold text-sm">{item.quantity}</span>
+              <span className="font-bold text-sm w-6 text-center">
+                {item.quantity}
+              </span>
               <button
                 onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                className="p-1 rounded-md bg-primary text-white"
+                className="p-1 rounded-md bg-primary text-white hover:bg-orange-600 transition-colors"
               >
-                <Plus className="w-4 h-4" />
+                <Plus size={14} />
               </button>
             </div>
           </div>
         ))}
       </div>
 
+      {/* قسم الحسابات والإتمام */}
       {cart.length > 0 && (
         <div className="p-4 bg-muted/10 border-t space-y-3">
           <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
-              <Percent className="w-4 h-4" /> الخصم (ج.م):
+              <Percent size={16} /> الخصم (ج.م):
             </div>
             <Input
               type="number"
+              min="0"
               value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
+              onChange={handleDiscountChange}
               className="w-24 h-8 text-center font-bold bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
 
-          <div className="space-y-1 text-sm font-bold">
-            <div className="flex justify-between">
+          <div className="space-y-2 text-sm font-bold">
+            <div className="flex justify-between text-muted-foreground font-medium">
               <span>المجموع الفرعي</span>
-              <span>{cartTotal.toFixed(2)}</span>
+              <span>{cartTotal.toFixed(2)} ج.م</span>
             </div>
             {discountVal > 0 && (
-              <div className="flex justify-between text-red-600">
-                <span>الخصم</span>
-                <span>-{discountVal.toFixed(2)}</span>
+              <div className="flex justify-between text-destructive">
+                <span>قيمة الخصم</span>
+                <span>-{discountVal.toFixed(2)} ج.م</span>
               </div>
             )}
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>الضريبة (15%)</span>
-              <span>{tax.toFixed(2)}</span>
+            <div className="flex justify-between text-blue-600 border-t border-dashed pt-1">
+              <span>القيمة المضافة (15%)</span>
+              <span>+{vatAmount.toFixed(2)} ج.م</span>
             </div>
-            <div className="flex justify-between text-lg font-black border-t pt-2 text-primary">
+            <div className="flex justify-between text-xl font-black border-t pt-2 text-primary">
               <span>الإجمالي النهائي</span>
               <span>{grandTotal.toFixed(2)} ج.م</span>
             </div>
@@ -192,12 +249,12 @@ const CartPanel = () => {
           {!showCheckout ? (
             <Button
               onClick={() => setShowCheckout(true)}
-              className="w-full h-14 text-lg font-bold rounded-xl shadow-lg"
+              className="w-full h-14 text-lg font-bold rounded-xl shadow-lg bg-primary hover:bg-orange-600 transition-all"
             >
               إتمام العملية
             </Button>
           ) : (
-            <div className="space-y-4 p-4 bg-background rounded-2xl border-2 border-primary/20 shadow-xl">
+            <div className="space-y-3 p-4 bg-background rounded-2xl border-2 border-primary/20 shadow-xl">
               {!showCashInput ? (
                 <div className="space-y-2">
                   <Input
@@ -213,27 +270,41 @@ const CartPanel = () => {
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="h-11"
                   />
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <Button
+                      onClick={handleSaveQuotation}
+                      disabled={isProcessing}
+                      variant="outline"
+                      className="border-primary text-primary h-11 gap-2 font-bold"
+                    >
+                      <FileText size={16} /> عرض سعر
+                    </Button>
+                    <Button
+                      onClick={() => setShowCheckout(false)}
+                      variant="secondary"
+                      className="h-11"
+                    >
+                      رجوع
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2">
                     <Button
                       onClick={() => processSale("cash")}
-                      className="bg-green-600 h-16 flex-col gap-1"
+                      className="bg-green-600 hover:bg-green-700 h-16 flex-col gap-1 text-[10px] font-bold text-white"
                     >
-                      <Banknote className="w-5 h-5" />
-                      نقداً
+                      <Banknote size={20} /> نقداً
                     </Button>
                     <Button
                       onClick={() => processSale("card")}
-                      className="bg-blue-600 h-16 flex-col gap-1"
+                      className="bg-blue-600 hover:bg-blue-700 h-16 flex-col gap-1 text-[10px] font-bold text-white"
                     >
-                      <CreditCard className="w-5 h-5" />
-                      بطاقة
+                      <CreditCard size={20} /> بطاقة
                     </Button>
                     <Button
                       onClick={() => processSale("mobile")}
-                      className="bg-slate-800 h-16 flex-col gap-1"
+                      className="bg-slate-800 hover:bg-slate-900 h-16 flex-col gap-1 text-[10px] font-bold text-white"
                     >
-                      <Smartphone className="w-5 h-5" />
-                      محفظة
+                      <Smartphone size={20} /> محفظة
                     </Button>
                   </div>
                 </div>
@@ -247,28 +318,28 @@ const CartPanel = () => {
                     placeholder="المبلغ المستلم..."
                     value={cashReceived}
                     onChange={(e) => setCashReceived(e.target.value)}
-                    className="h-14 text-center text-2xl font-bold border-2 border-green-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="h-14 text-center text-2xl font-bold border-2 border-green-500"
                     autoFocus
                   />
                   {changeDue >= 0 && (
-                    <div className="p-3 bg-green-600 text-white text-center rounded-xl font-black">
+                    <div className="p-3 bg-green-600 text-white text-center rounded-xl font-black text-lg">
                       الباقي: {changeDue.toFixed(2)} ج.م
                     </div>
                   )}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 h-12"
                       onClick={() => setShowCashInput(false)}
                     >
                       رجوع
                     </Button>
                     <Button
                       disabled={isProcessing}
-                      className="flex-[2] bg-green-600 font-bold"
+                      className="flex-[2] bg-green-600 hover:bg-green-700 h-12 font-bold text-white"
                       onClick={() => processSale("cash")}
                     >
-                      تأكيد العملية
+                      تأكيد الدفع
                     </Button>
                   </div>
                 </div>
@@ -278,24 +349,27 @@ const CartPanel = () => {
         </div>
       )}
 
+      {/* مودال النجاح والطباعة */}
       <AnimatePresence>
         {showSuccess && currentSale && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
-              className="bg-card p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl"
+              className="bg-card p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl relative"
             >
               <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-2xl font-black mb-1">تمت العملية!</h3>
-              <p className="text-muted-foreground text-sm mb-6">
+              <h3 className="text-2xl font-black mb-1 text-foreground">
+                تمت العملية بنجاح!
+              </h3>
+              <p className="text-muted-foreground text-sm mb-6 font-mono">
                 {currentSale.receiptNumber}
               </p>
               <Button
                 onClick={handlePrint}
-                className="w-full h-14 bg-primary text-white font-black text-xl gap-3 shadow-xl"
+                className="w-full h-14 bg-primary text-white font-black text-xl gap-3 shadow-xl hover:bg-orange-600"
               >
-                <Printer className="w-6 h-6" /> طباعة
+                <Printer size={24} /> طباعة الفاتورة
               </Button>
               <Button
                 variant="ghost"
