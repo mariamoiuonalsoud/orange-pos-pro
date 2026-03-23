@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 // ضفنا أيقونات العين هنا
-import { Lock, LogIn, Eye, EyeOff } from "lucide-react";
+import { Lock, User, LogIn, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -62,22 +62,28 @@ const LoginPage = () => {
             <label className="block text-sm font-medium mb-1 text-foreground">
               اسم المستخدم
             </label>
-            <Input
-              type="text"
-              value={username}
-              onChange={(e) => {
-                setUsername(e.target.value);
-                setError("");
-              }}
-              className="text-right"
-              dir="ltr"
-            />
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                <User size={18} />
+              </span>
+              <Input
+                type="text"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setError("");
+                }}
+                className="text-right"
+                dir="ltr"
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1 text-foreground">
               كلمة المرور
             </label>
+
             <div className="relative">
               <Input
                 // هنا بنغير نوع الحقل بناءً على حالة الـ state
