@@ -152,14 +152,14 @@ const CartPanel = () => {
 
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [discount, setDiscount] = useState<string>("0"); // لتسهيل إدخال الأرقام
+  const [discount, setDiscount] = useState<string>("0");
   const [isExisting, setIsExisting] = useState(false);
   const [showCashInput, setShowCashInput] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // حسابات الأسعار والخصم
-  const discountVal = parseFloat(discount) || 0;
+  // حسابات الأسعار والخصم مع ضمان عدم وجود قيم سالبة
+  const discountVal = Math.max(0, parseFloat(discount) || 0);
   const amountAfterDiscount = Math.max(0, cartTotal - discountVal);
   const tax = amountAfterDiscount * 0.15;
   const grandTotal = amountAfterDiscount + tax;
@@ -197,7 +197,6 @@ const CartPanel = () => {
     return true;
   };
 
-  // --- حفظ عرض السعر (تم إصلاح الـ any هنا) ---
   const handleQuotation = async () => {
     if (!validateInputs() || isProcessing) return;
     setIsProcessing(true);
@@ -212,7 +211,6 @@ const CartPanel = () => {
     if (success) {
       const receiptNum = `QUO-${Date.now().toString(36).toUpperCase()}`;
 
-      // إنشاء كائن SaleItem متوافق بدلاً من استخدام any
       const saleItems: SaleItem[] = cart.map((item) => ({
         ...item,
         returned_quantity: 0,
@@ -240,7 +238,6 @@ const CartPanel = () => {
     setIsProcessing(false);
   };
 
-  // --- عملية البيع الفعلي ---
   const processSale = async (method: "cash" | "card" | "mobile") => {
     if (!validateInputs() || isProcessing) return;
 
@@ -343,15 +340,24 @@ const CartPanel = () => {
 
       {cart.length > 0 && (
         <div className="p-4 bg-muted/10 border-t space-y-3">
-          {/* حقل الخصم */}
+          {/* حقل الخصم المحدث لمنع القيم السالبة */}
           <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
               <Percent className="w-4 h-4" /> الخصم (ج.م):
             </div>
             <Input
               type="number"
+              min="0" // يمنع النزول تحت الصفر من خلال الأسهم
               value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                // يمنع كتابة أي رقم سالب يدوياً
+                if (parseFloat(val) < 0) {
+                  setDiscount("0");
+                } else {
+                  setDiscount(val);
+                }
+              }}
               className="w-24 h-8 text-center font-bold bg-white border-blue-200"
             />
           </div>
