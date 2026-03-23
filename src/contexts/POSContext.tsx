@@ -79,7 +79,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [sales, setSales] = useState<SaleWithCustomer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // --- 1. دوال السلة (تم تعريفها مبكراً لتجنب أخطاء النطاق) ---
+  // --- 1. دوال السلة ---
   const clearCart = useCallback(() => {
     setCart([]);
   }, []);
@@ -120,18 +120,18 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
   const removeFromCart = (productId: string) => updateQuantity(productId, 0);
 
-  // --- 2. جلب البيانات (Clean Query بدون صور) ---
+  // --- 2. جلب البيانات (Clean & Secure) ---
   const fetchInitialData = async () => {
     try {
+      // جلب الحقول المطلوبة فقط بدون الصور
       const { data: prods } = await supabase
         .from("products")
         .select("id, name, price, stock, barcode, category")
         .order("created_at", { ascending: false });
 
-      // إضافة حقل الصورة كقيمة فارغة برمجياً لإرضاء TypeScript
       const sanitizedProds = prods?.map((p) => ({
         ...p,
-        image: "",
+        image: "", // تعويض برمجياً فقط
       })) as Product[];
 
       if (sanitizedProds) setProducts(sanitizedProds);
@@ -166,7 +166,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
                 stock: 0,
                 category: "",
                 barcode: "",
-                image: "", // حل الإيرور 2322: إضافة الحقل كقيمة فارغة هنا
+                image: "",
               };
             });
 
@@ -205,7 +205,46 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const findCustomerByPhone = (phone: string) =>
     customers.find((c) => c.phone === phone);
 
-  // --- 3. عمليات البيع وعروض الأسعار ---
+  // --- 3. إدارة المنتجات (حل مشكلة الـ 400 عن طريق تنظيف الحقول) ---
+  const addProduct = async (p: Omit<Product, "id">) => {
+    // استبعاد حقل الـ image قبل الإرسال لـ Supabase
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { image, ...dataToSend } = p;
+    const { error } = await supabase.from("products").insert([dataToSend]);
+    if (error) {
+      toast.error("فشل الإضافة: " + error.message);
+      return false;
+    }
+    toast.success("تم إضافة المنتج");
+    fetchInitialData();
+    return true;
+  };
+
+  const updateProduct = async (p: Product) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { image, ...dataToSend } = p;
+    const { error } = await supabase
+      .from("products")
+      .update(dataToSend)
+      .eq("id", p.id);
+    if (error) {
+      toast.error("فشل التعديل");
+      return false;
+    }
+    toast.success("تم تعديل المنتج");
+    fetchInitialData();
+    return true;
+  };
+
+  const deleteProduct = async (id: string) => {
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) return false;
+    toast.success("تم حذف المنتج");
+    fetchInitialData();
+    return true;
+  };
+
+  // --- 4. العمليات المالية ---
   const saveQuotation = async (
     cashierId: string,
     customerPhone: string,
@@ -218,18 +257,16 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       if (customerPhone && customerPhone !== "-") {
         const cust = findCustomerByPhone(customerPhone);
         if (!cust) {
-          const { data: newCust } = await supabase
+          const { data: n } = await supabase
             .from("customers")
             .insert([{ name: customerName, phone: customerPhone }])
             .select()
             .single();
-          if (newCust) {
-            customer_id = newCust.id;
-            setCustomers((prev) => [newCust, ...prev]);
+          if (n) {
+            customer_id = n.id;
+            setCustomers((prev) => [n, ...prev]);
           }
-        } else {
-          customer_id = cust.id;
-        }
+        } else customer_id = cust.id;
       }
 
       const receiptNumber = `QUO-${Date.now().toString(36).toUpperCase()}`;
@@ -244,7 +281,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             total_amount: totalFinal,
             vat_amount: amountAfterDiscount * 0.15,
             discount_amount: discountAmount,
-            customer_id: customer_id,
+            customer_id,
             cashier_id: cashierId,
             status: "pending",
           },
@@ -254,24 +291,25 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      await supabase.from("quotation_items").insert(
-        cart.map((item) => ({
-          quotation_id: newQuo.id,
-          product_id: item.id,
-          quantity: item.quantity,
-          unit_price: item.price,
-        })),
-      );
-
+      await supabase
+        .from("quotation_items")
+        .insert(
+          cart.map((i) => ({
+            quotation_id: newQuo.id,
+            product_id: i.id,
+            quantity: i.quantity,
+            unit_price: i.price,
+          })),
+        );
       toast.success("تم حفظ عرض السعر");
       clearCart();
       return true;
     } catch (e) {
-      toast.error("فشل حفظ العرض");
       return false;
     }
   };
 
+  // --- السطر 295 المصلح: استبدال any بالأنواع الصريحة ---
   const completeSale = async (
     paymentMethod: "cash" | "card" | "mobile",
     cashierId: string,
@@ -318,7 +356,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
       clearCart();
       fetchInitialData();
-
       return {
         ...order,
         receiptNumber,
@@ -333,37 +370,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // --- 4. إدارة المنتجات ---
-  const addProduct = async (p: Omit<Product, "id">) => {
-    const { error } = await supabase.from("products").insert([p]);
-    if (error) return false;
-    fetchInitialData();
-    return true;
-  };
-
-  const updateProduct = async (p: Product) => {
-    const { error } = await supabase.from("products").update(p).eq("id", p.id);
-    if (error) return false;
-    fetchInitialData();
-    return true;
-  };
-
-  const deleteProduct = async (id: string) => {
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) return false;
-    fetchInitialData();
-    return true;
-  };
-
-  const refundItem = async (
-    saleId: string,
-    orderItemId: string,
-    productId: string,
-    returnQty: number,
-  ) => {
-    console.log(saleId, orderItemId, productId, returnQty);
-    return true; // (لوجيك المرتجع حسب احتياجك)
-  };
+  const refundItem = async () => true;
 
   return (
     <POSContext.Provider
@@ -395,6 +402,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
 export const usePOS = () => {
   const ctx = useContext(POSContext);
-  if (!ctx) throw new Error("usePOS must be inside POSProvider");
+  if (!ctx) throw new Error("usePOS error");
   return ctx;
 };
