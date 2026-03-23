@@ -345,7 +345,20 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     if (!error) await fetchInitialData();
     return !error;
   };
+  const channel = supabase
+    .channel("schema-db-changes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "products" },
+      () => {
+        fetchInitialData(); // أول ما يحصل تغيير في المنتجات، نحدث البيانات أوتوماتيك
+      },
+    )
+    .subscribe();
 
+  return () => {
+    supabase.removeChannel(channel);
+  };
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (!error) await fetchInitialData();
