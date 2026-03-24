@@ -99,6 +99,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .select("*")
         .order("name");
       if (prods) setProducts(prods as Product[]);
+
       const { data: custs } = await supabase.from("customers").select("*");
       if (custs) setCustomers(custs as Customer[]);
 
@@ -116,7 +117,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             receiptNumber: o.receipt_number,
             total: o.total_amount,
             date: o.created_at,
-            paymentMethod: o.payment_method as "cash" | "card" | "mobile",
+            paymentMethod:
+              (o.payment_method as "cash" | "card" | "mobile") || "cash",
             cashierId: o.cashier_id,
             customerName: customer?.name || "عميل عام",
             customerPhone: customer?.phone || "---",
@@ -137,7 +139,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         setSales(formatted);
       }
     } catch (e) {
-      console.error(e);
+      console.error("Fetch error:", e);
     }
   }, []);
 
@@ -145,28 +147,39 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const addToCart = useCallback((p: Product) => {
-    setCart((prev) => {
-      const ex = prev.find((i) => i.id === p.id);
-      if (ex && ex.quantity >= p.stock) {
-        toast.error("نفذ المخزون");
-        return prev;
+  const addToCart = useCallback(
+    (p: Product) => {
+      const existing = cart.find((i) => i.id === p.id);
+      if (existing && existing.quantity >= p.stock) {
+        toast.error("نفذ المخزون!");
+        return;
       }
-      return ex
-        ? prev.map((i) =>
-            i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i,
-          )
-        : [...prev, { ...p, quantity: 1 }];
-    });
-  }, []);
+      setCart((prev) =>
+        existing
+          ? prev.map((i) =>
+              i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i,
+            )
+          : [...prev, { ...p, quantity: 1 }],
+      );
+    },
+    [cart],
+  );
 
-  const updateQuantity = useCallback((id: string, q: number) => {
-    setCart((prev) =>
-      q <= 0
-        ? prev.filter((i) => i.id !== id)
-        : prev.map((i) => (i.id === id ? { ...i, quantity: q } : i)),
-    );
-  }, []);
+  const updateQuantity = useCallback(
+    (id: string, q: number) => {
+      const p = products.find((prod) => prod.id === id);
+      if (p && q > p.stock) {
+        toast.error("تجاوز المخزن");
+        return;
+      }
+      setCart((prev) =>
+        q <= 0
+          ? prev.filter((i) => i.id !== id)
+          : prev.map((i) => (i.id === id ? { ...i, quantity: q } : i)),
+      );
+    },
+    [products],
+  );
 
   const completeSale = async (
     pm: "cash" | "card" | "mobile",
@@ -181,6 +194,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
       const vat = (subtotal - da) * 0.15;
       const total = subtotal - da + vat;
+
       const { data: order, error } = await supabase
         .from("orders")
         .insert([
@@ -242,35 +256,78 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     cn: string,
     da: number,
   ) => {
-    const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const vat = (subtotal - da) * 0.15;
-    const { data: quo, error } = await supabase
-      .from("quotations")
-      .insert([
-        {
-          receipt_number: `QUO-${Date.now().toString(36).toUpperCase()}`,
-          total_amount: subtotal - da + vat,
-          vat_amount: vat,
-          discount_amount: da,
-          status: "pending",
-        },
-      ])
-      .select()
-      .single();
-    if (error) return false;
-    await supabase
-      .from("quotation_items")
-      .insert(
-        cart.map((i) => ({
-          quotation_id: quo.id,
-          product_id: i.id,
-          quantity: i.quantity,
-          unit_price: i.price,
-          total_price: i.price * i.quantity,
-        })),
-      );
-    setCart([]);
-    return true;
+    try {
+      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+      const vat = (subtotal - da) * 0.15;
+      const { data: quo, error } = await supabase
+        .from("quotations")
+        .insert([
+          {
+            receipt_number: `QUO-${Date.now().toString(36).toUpperCase()}`,
+            total_amount: subtotal - da + vat,
+            vat_amount: vat,
+            discount_amount: da,
+            status: "pending",
+          },
+        ])
+        .select()
+        .single();
+      if (error) throw error;
+      await supabase
+        .from("quotation_items")
+        .insert(
+          cart.map((i) => ({
+            quotation_id: quo.id,
+            product_id: i.id,
+            quantity: i.quantity,
+            unit_price: i.price,
+            total_price: i.price * i.quantity,
+          })),
+        );
+      setCart([]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const updateProduct = async (p: Product) => {
+    try {
+      const { name, price, category, stock, barcode } = p;
+      const { error } = await supabase
+        .from("products")
+        .update({ name, price, category, stock, barcode })
+        .eq("id", p.id);
+      if (error) throw error;
+      await fetchInitialData();
+      return true;
+    } catch (e: unknown) {
+      const err = e as Error;
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  const addProduct = async (p: Omit<Product, "id">) => {
+    try {
+      const { name, price, category, stock, barcode } = p;
+      const { error } = await supabase
+        .from("products")
+        .insert([{ name, price, category, stock, barcode }]);
+      if (error) throw error;
+      await fetchInitialData();
+      return true;
+    } catch (e: unknown) {
+      const err = e as Error;
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  const deleteProduct = async (id: string) => {
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (!error) await fetchInitialData();
+    return !error;
   };
 
   const value: POSContextType = {
@@ -304,32 +361,17 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       setTempCustomer({ name: n, phone: p });
       setCartDiscount(d);
     },
-    updateProduct: async (p) => {
-      const { error } = await supabase
-        .from("products")
-        .update(p)
-        .eq("id", p.id);
-      if (!error) fetchInitialData();
-      return !error;
-    },
-    addProduct: async (p) => {
-      const { error } = await supabase.from("products").insert([p]);
-      if (!error) fetchInitialData();
-      return !error;
-    },
-    deleteProduct: async (id) => {
-      const { error } = await supabase.from("products").delete().eq("id", id);
-      if (!error) fetchInitialData();
-      return !error;
-    },
+    updateProduct,
+    addProduct,
+    deleteProduct,
     fetchInitialData,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
 };
 
-export const usePOS = () => {
+export function usePOS() {
   const context = useContext(POSContext);
-  if (!context) throw new Error("usePOS must be used within a POSProvider");
+  if (!context) throw new Error("usePOS error");
   return context;
-};
+}
