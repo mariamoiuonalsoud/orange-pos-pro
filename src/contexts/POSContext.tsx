@@ -23,6 +23,7 @@ export interface SaleItem extends CartItem {
 }
 
 export interface SaleWithCustomer extends Omit<Sale, "items"> {
+  receiptNumber: string;
   customerPhone?: string;
   customerName?: string;
   amountPaid?: number;
@@ -215,17 +216,15 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       for (const item of cart) {
-        await supabase
-          .from("order_items")
-          .insert([
-            {
-              order_id: order.id,
-              product_id: item.id,
-              quantity: item.quantity,
-              unit_price: item.price,
-              total_price: item.price * item.quantity,
-            },
-          ]);
+        await supabase.from("order_items").insert([
+          {
+            order_id: order.id,
+            product_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price,
+            total_price: item.price * item.quantity,
+          },
+        ]);
         const p = products.find((prod) => prod.id === item.id);
         if (p)
           await supabase
@@ -273,17 +272,15 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .select()
         .single();
       if (error) throw error;
-      await supabase
-        .from("quotation_items")
-        .insert(
-          cart.map((i) => ({
-            quotation_id: quo.id,
-            product_id: i.id,
-            quantity: i.quantity,
-            unit_price: i.price,
-            total_price: i.price * i.quantity,
-          })),
-        );
+      await supabase.from("quotation_items").insert(
+        cart.map((i) => ({
+          quotation_id: quo.id,
+          product_id: i.id,
+          quantity: i.quantity,
+          unit_price: i.price,
+          total_price: i.price * i.quantity,
+        })),
+      );
       setCart([]);
       return true;
     } catch {
