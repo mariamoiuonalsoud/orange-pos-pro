@@ -80,6 +80,7 @@ interface POSContextType {
   updateProduct: (p: Product) => Promise<boolean>;
   addProduct: (p: Omit<Product, "id">) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<boolean>;
+  addCustomer: (customer: Omit<Customer, "id">) => Promise<boolean>; // الدالة الجديدة
   fetchInitialData: () => Promise<void>;
   refundItem: (
     orderId: string,
@@ -379,6 +380,36 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     return !error;
   };
 
+  // --- الدالة الجديدة لإضافة العميل ---
+  const addCustomer = async (customer: Omit<Customer, "id">) => {
+    try {
+      const { name, phone } = customer;
+
+      // خطوة استباقية: التأكد إن العميل مش مسجل بنفس رقم التليفون مسبقاً
+      const isPhoneExists = customers.some((c) => c.phone === phone);
+      if (isPhoneExists) {
+        toast.error("رقم الهاتف مسجل لعميل آخر بالفعل!");
+        return false;
+      }
+
+      // إدخال البيانات في الداتابيز
+      const { error } = await supabase
+        .from("customers")
+        .insert([{ name, phone }]);
+
+      if (error) throw error;
+
+      // تحديث البيانات في الـ Context عشان يظهر العميل الجديد فوراً
+      await fetchInitialData();
+      toast.success("تم إضافة العميل بنجاح!");
+      return true;
+    } catch (e: unknown) {
+      const err = e as Error;
+      toast.error(err.message || "حدث خطأ أثناء إضافة العميل");
+      return false;
+    }
+  };
+
   const refundItem = async (
     orderId: string,
     orderItemId: string,
@@ -500,6 +531,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     updateProduct,
     addProduct,
     deleteProduct,
+    addCustomer, // تمت الإضافة هنا
     fetchInitialData,
     refundItem,
   };

@@ -13,7 +13,7 @@ import {
   Download,
   PackageMinus,
   X,
-  FileBox, // أيقونة لتبويب المرتجعات
+  FileBox,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import Barcode from "react-barcode";
@@ -36,8 +36,11 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
     return (
       <div
         ref={ref}
-        className="p-6 bg-white text-black font-mono text-[12px] w-[80mm]"
+        // تم إضافة كلاس report-print-area هنا
+        className="p-6 bg-white text-black font-mono text-[12px] report-print-area"
         dir="rtl"
+        // السماح بالتمدد التلقائي
+        style={{ width: "80mm", minHeight: "100%", height: "max-content" }}
       >
         <div className="text-center border-b border-black pb-2 mb-3">
           <h2 className="text-lg font-bold uppercase">Orange Group</h2>
@@ -94,8 +97,8 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           </thead>
           <tbody>
             {sale.items.map((item) => (
-              <tr key={item.id}>
-                <td className="py-1">{item.name}</td>
+              <tr key={item.id} className="align-top">
+                <td className="py-1 max-w-[30mm] break-words">{item.name}</td>
                 <td className="text-center">x{item.quantity}</td>
                 <td className="text-center text-red-600">
                   {item.returned_quantity && item.returned_quantity > 0
@@ -135,15 +138,27 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           </p>
         </div>
 
+        {/* --- تحديث ستايل الطباعة الديناميكي هنا --- */}
         <style type="text/css" media="print">
           {`
-            @page { size: 80mm auto; margin: 0 !important; }
+            @page { 
+              size: 80mm auto; 
+              margin: 0 !important; 
+            }
             @media print {
               html, body {
-                width: 80mm !important; margin: 0 !important;
-                padding: 0 !important; -webkit-print-color-adjust: exact;
+                width: 80mm !important; 
+                margin: 0 !important;
+                padding: 0 !important; 
+                height: auto !important;
               }
-              body::before, body::after { display: none !important; }
+              .report-print-area {
+                page-break-inside: avoid !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
             }
           `}
         </style>
@@ -154,13 +169,13 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
 ReceiptToPrint.displayName = "ReceiptToPrint";
 
 type FilterType = "all" | "year" | "month" | "day";
-type ReportTab = "all_sales" | "returns"; // حالة التبويبات
+type ReportTab = "all_sales" | "returns";
 
 const ReportsPage = () => {
   const { sales, refundItem } = usePOS();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ReportTab>("all_sales"); // التبويب النشط
+  const [activeTab, setActiveTab] = useState<ReportTab>("all_sales");
   const [saleToPrint, setSaleToPrint] = useState<SaleWithCustomer | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
 
@@ -188,7 +203,6 @@ const ReportsPage = () => {
     setTimeout(() => handlePrintAction(), 100);
   };
 
-  // فلترة التاريخ والبحث
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       const matchCustomer =
@@ -229,7 +243,6 @@ const ReportsPage = () => {
     selectedDate,
   ]);
 
-  // تصفية إضافية بناءً على التبويب النشط (مرتجعات فقط أم كل الفواتير)
   const displayedSales = useMemo(() => {
     if (activeTab === "returns") {
       return filteredSales.filter(
@@ -345,7 +358,6 @@ const ReportsPage = () => {
           </div>
         </div>
 
-        {/* --- أزرار التبويبات (Tabs) --- */}
         <div className="flex bg-card p-1 rounded-xl border border-border w-fit shadow-sm">
           <button
             onClick={() => setActiveTab("all_sales")}
@@ -369,7 +381,6 @@ const ReportsPage = () => {
           </button>
         </div>
 
-        {/* --- قسم الفلاتر والبحث --- */}
         <div className="bg-card p-5 rounded-xl border border-border shadow-sm space-y-4">
           <div className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
             <div className="flex items-center gap-2">
@@ -442,7 +453,6 @@ const ReportsPage = () => {
           </div>
         </div>
 
-        {/* سجل الفواتير */}
         <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">

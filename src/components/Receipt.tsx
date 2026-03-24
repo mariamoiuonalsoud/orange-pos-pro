@@ -13,19 +13,27 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
 
     if (!sale || !sale.items) return null;
 
-    // الحسابات بناءً على بيانات العملية المخزنة وليس السلة الحالية
+    const rawSale = sale as SaleWithCustomer & { receipt_number?: string };
+    const receiptNo =
+      sale.receiptNumber || rawSale.receipt_number || "ORG-0000";
+
     const finalTotal = sale.total || 0;
     const discount = sale.discountAmount || 0;
-    const amountAfterDiscount = finalTotal / 1.15;
-    const tax = finalTotal - amountAfterDiscount;
+
+    const tax =
+      sale.vatAmount !== undefined
+        ? sale.vatAmount
+        : finalTotal - finalTotal / 1.15;
+
+    const amountAfterDiscount = finalTotal - tax;
     const subtotalBeforeDiscount = amountAfterDiscount + discount;
 
     return (
       <div
         ref={ref}
-        style={{ width: "80mm", backgroundColor: "white" }}
-        className="p-4 text-black font-mono text-[12px] leading-tight mx-auto"
+        className="p-4 bg-white text-black font-mono text-[12px] leading-tight mx-auto receipt-print-area"
         dir="rtl"
+        style={{ width: "80mm" }}
       >
         <div className="text-center border-b border-black pb-2 mb-2">
           <h2 className="text-lg font-bold uppercase tracking-tighter">
@@ -40,8 +48,7 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
 
         <div className="mb-2 text-[11px] space-y-0.5 border-b border-dashed border-black/20 pb-2">
           <p>
-            رقم الفاتورة:{" "}
-            <span className="font-bold">{sale.receiptNumber}</span>
+            رقم الفاتورة: <span className="font-bold">{receiptNo}</span>
           </p>
           <p>
             الكاشير:{" "}
@@ -132,7 +139,7 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
 
         <div className="flex flex-col items-center gap-1">
           <Barcode
-            value={sale.receiptNumber}
+            value={receiptNo}
             width={1.0}
             height={30}
             fontSize={10}
@@ -143,8 +150,37 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
           </p>
         </div>
 
+        {/* الـ CSS الموحد لمنع الفواصل */}
         <style type="text/css" media="print">
-          {` @page { size: 80mm auto; margin: 0 !important; } body { margin: 0 !important; width: 80mm !important; } `}
+          {`
+            @page { 
+              size: 80mm auto !important; 
+              margin: 0 !important; 
+            }
+            @media print {
+              html, body {
+                width: 80mm !important; 
+                margin: 0 !important;
+                padding: 0 !important; 
+                height: auto !important;
+                overflow: visible !important;
+              }
+              .receipt-print-area {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                page-break-inside: auto !important;
+              }
+              tr, td, th {
+                page-break-inside: avoid !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+          `}
         </style>
       </div>
     );
