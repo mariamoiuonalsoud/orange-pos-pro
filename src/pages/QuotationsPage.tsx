@@ -12,7 +12,6 @@ import {
   Search,
   Barcode,
   AlertTriangle,
-  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,13 +47,29 @@ const QuotationsPage = () => {
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchQuotes = async () => {
-    const { data } = await supabase
+    // التأكد من جلب بيانات العملاء بشكل صحيح من جدول الـ customers
+    const { data, error } = await supabase
       .from("quotations")
       .select(
-        `*, customers(name, phone), quotation_items(quantity, products(*))`,
+        `
+        *,
+        customers (
+          name,
+          phone
+        ),
+        quotation_items (
+          quantity,
+          products (*)
+        )
+      `,
       )
       .eq("status", "pending")
       .order("created_at", { ascending: false });
+
+    if (error) {
+      toast.error("خطأ في جلب البيانات");
+      return;
+    }
     if (data) setQuotations(data as unknown as FullQuotation[]);
   };
 
@@ -124,25 +139,33 @@ const QuotationsPage = () => {
                 className="bg-card p-5 rounded-2xl border border-border shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row justify-between items-center gap-4"
               >
                 <div className="flex-1">
-                  <span className="font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs">
-                    {quote.receipt_number}
-                  </span>
-                  <div className="flex flex-wrap gap-4 mt-3 font-bold text-gray-700">
-                    <span className="flex items-center gap-1.5 text-sm">
-                      <User size={16} className="text-primary" />
-                      {quote.customers?.name || "عميل بدون اسم"}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs">
+                      {quote.receipt_number}
                     </span>
-                    <span className="flex items-center gap-1.5 text-sm">
-                      <Phone size={16} className="text-primary" />
-                      {quote.customers?.phone || "---"}
-                    </span>
+                  </div>
+
+                  {/* قسم بيانات العميل المعدل */}
+                  <div className="flex flex-wrap gap-6 mt-3 font-bold">
+                    <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-lg border border-border/50">
+                      <User size={18} className="text-primary" />
+                      <span className="text-sm text-foreground">
+                        {quote.customers?.name || "عميل غير مسجل"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-lg border border-border/50">
+                      <Phone size={18} className="text-primary" />
+                      <span className="text-sm text-foreground font-mono">
+                        {quote.customers?.phone || "بدون رقم موبايل"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0">
                   <div className="text-left">
                     <p className="text-xs text-muted-foreground font-bold mb-0.5">
-                      الإجمالي
+                      إجمالي العرض
                     </p>
                     <p className="text-xl font-black text-primary">
                       {quote.total_amount.toFixed(2)}{" "}
@@ -157,7 +180,7 @@ const QuotationsPage = () => {
                         setIsDeleteDialogOpen(true);
                       }}
                       className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
-                      title="حذف عرض السعر"
+                      title="حذف"
                     >
                       <Trash2 size={20} />
                     </button>
@@ -190,14 +213,14 @@ const QuotationsPage = () => {
                 className="mx-auto text-muted-foreground mb-4 opacity-20"
               />
               <p className="text-muted-foreground font-bold">
-                لا توجد عروض أسعار مطابقة للبحث
+                لا توجد عروض أسعار حالياً
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* مودال الحذف الاحترافي المصمم */}
+      {/* مودال الحذف الاحترافي */}
       <AnimatePresence>
         {isDeleteDialogOpen && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -249,9 +272,10 @@ const QuotationsPage = () => {
         )}
       </AnimatePresence>
 
-      {/* مكون الطباعة المخفي */}
       <div className="hidden">
-        <QuotationReceipt ref={printRef} quote={selectedQuote} />
+        {selectedQuote && (
+          <QuotationReceipt ref={printRef} quote={selectedQuote} />
+        )}
       </div>
     </div>
   );
