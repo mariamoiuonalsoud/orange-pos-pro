@@ -1,8 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap");
 
 @layer base {
   :root {
@@ -98,7 +94,7 @@
   .pos-gradient {
     background: linear-gradient(135deg, hsl(27 95% 55%), hsl(20 90% 45%));
   }
-  
+
   .pos-gradient-dark {
     background: linear-gradient(135deg, hsl(0 0% 12%), hsl(0 0% 8%));
   }

@@ -48,11 +48,10 @@ const DashboardPage = () => {
   const smartLowStock = inventoryMetrics
     .filter(
       (p) =>
-        p.stock === 0 || // تم حذف شرط p.stock > 0 ليظهر الصفر
-        (p.daysToStockout <= 7 && p.runRate > 0) ||
-        p.stock <= 3,
+        p.stock <= 5 || // ده هيضمن ظهور أي منتج رصيده 5 أو أقل سواء عليه حركة أو لأ
+        (p.daysToStockout <= 7 && p.runRate > 0),
     )
-    .sort((a, b) => a.stock - b.stock); // الترتيب من الأقل للأكثر رصيداً
+    .sort((a, b) => a.stock - b.stock);
 
   // 2. المنتجات بطيئة الحركة
   const slowMoving = inventoryMetrics
