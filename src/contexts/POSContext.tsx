@@ -28,7 +28,7 @@ export interface SaleWithCustomer extends Omit<Sale, "items"> {
   amountPaid?: number;
   changeDue?: number;
   discountAmount?: number;
-  vatAmount?: number; // مضافة للتقارير
+  vatAmount?: number;
   status?: "completed" | "partially_refunded" | "refunded";
   items: SaleItem[];
 }
@@ -42,7 +42,7 @@ interface POSContextType {
   products: Product[];
   cart: CartItem[];
   customers: Customer[];
-  sales: SaleWithCustomer[]; // البيانات اللي بتغذي التقارير والـ Dashboard
+  sales: SaleWithCustomer[];
   cartTotal: number;
   cartCount: number;
   cartDiscount: number;
@@ -55,19 +55,19 @@ interface POSContextType {
   clearCart: () => void;
   findCustomerByPhone: (phone: string) => Customer | undefined;
   completeSale: (
-    paymentMethod: "cash" | "card" | "mobile",
-    cashierId: string,
-    customerPhone: string,
-    customerName: string,
-    amountPaid?: number,
-    changeDue?: number,
-    discountAmount?: number,
+    pm: "cash" | "card" | "mobile",
+    cid: string,
+    cp: string,
+    cn: string,
+    ap?: number,
+    cd?: number,
+    da?: number,
   ) => Promise<SaleWithCustomer | null>;
   saveQuotation: (
-    cashierId: string,
-    customerPhone: string,
-    customerName: string,
-    discountAmount: number,
+    cid: string,
+    cp: string,
+    cn: string,
+    da: number,
   ) => Promise<boolean>;
   deleteQuotation: (id: string) => Promise<boolean>;
   loadQuotationToCart: (
@@ -76,9 +76,9 @@ interface POSContextType {
     phone: string,
     discount: number,
   ) => void;
-  updateProduct: (product: Product) => Promise<boolean>;
-  addProduct: (product: Omit<Product, "id">) => Promise<boolean>;
-  deleteProduct: (productId: string) => Promise<boolean>;
+  updateProduct: (p: Product) => Promise<boolean>;
+  addProduct: (p: Omit<Product, "id">) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<boolean>;
   fetchInitialData: () => Promise<void>;
 }
 
@@ -92,30 +92,21 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [cartDiscount, setCartDiscount] = useState<number>(0);
   const [tempCustomer, setTempCustomer] = useState({ name: "", phone: "" });
 
-  // --- 1. جلب البيانات الأساسية (تعديل لضمان ظهور التقارير) ---
   const fetchInitialData = useCallback(async () => {
     try {
-      // جلب المنتجات والعملاء
       const { data: prods } = await supabase
         .from("products")
         .select("*")
         .order("name");
       if (prods) setProducts(prods as Product[]);
-
       const { data: custs } = await supabase.from("customers").select("*");
       if (custs) setCustomers(custs as Customer[]);
 
-      // جلب الطلبات والأصناف للتقارير والـ Dashboard
-      const { data: ords, error: ordError } = await supabase
+      const { data: ords } = await supabase
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
-
-      const { data: items, error: itemError } = await supabase
-        .from("order_items")
-        .select("*");
-
-      if (ordError || itemError) throw new Error("خطأ في جلب بيانات المبيعات");
+      const { data: items } = await supabase.from("order_items").select("*");
 
       if (ords && items) {
         const formatted: SaleWithCustomer[] = ords.map((o) => {
@@ -124,19 +115,11 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             id: o.id,
             receiptNumber: o.receipt_number,
             total: o.total_amount,
-            vatAmount: o.vat_amount || 0,
             date: o.created_at,
-            paymentMethod:
-              (o.payment_method as "cash" | "card" | "mobile") || "cash",
+            paymentMethod: o.payment_method as "cash" | "card" | "mobile",
             cashierId: o.cashier_id,
-            amountPaid: o.amount_paid || 0,
-            changeDue: o.change_due || 0,
-            discountAmount: o.discount_amount || 0,
             customerName: customer?.name || "عميل عام",
             customerPhone: customer?.phone || "---",
-            status:
-              (o.status as "completed" | "partially_refunded" | "refunded") ||
-              "completed",
             items: items
               .filter((i) => i.order_id === o.id)
               .map((i) => ({
@@ -151,10 +134,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
               })),
           };
         });
-        setSales(formatted); // هنا بنغذي الداتا للـ Dashboard
+        setSales(formatted);
       }
-    } catch (error) {
-      console.error("Fetch Error:", error);
+    } catch (e) {
+      console.error(e);
     }
   }, []);
 
@@ -162,79 +145,42 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // --- 2. التحكم في السلة والتحويل ---
-  const clearCart = useCallback(() => {
-    setCart([]);
-    setTempCustomer({ name: "", phone: "" });
-    setCartDiscount(0);
+  const addToCart = useCallback((p: Product) => {
+    setCart((prev) => {
+      const ex = prev.find((i) => i.id === p.id);
+      if (ex && ex.quantity >= p.stock) {
+        toast.error("نفذ المخزون");
+        return prev;
+      }
+      return ex
+        ? prev.map((i) =>
+            i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i,
+          )
+        : [...prev, { ...p, quantity: 1 }];
+    });
   }, []);
 
-  const loadQuotationToCart = useCallback(
-    (
-      quoteItems: QuotationItemDB[],
-      name: string,
-      phone: string,
-      discount: number,
-    ) => {
-      setCart([]);
-      const items: CartItem[] = quoteItems
-        .filter((i) => i.products !== null)
-        .map((i) => ({ ...i.products!, quantity: i.quantity }));
-      setCart(items);
-      setTempCustomer({ name, phone });
-      setCartDiscount(discount);
-    },
-    [],
-  );
-
-  const addToCart = useCallback(
-    (p: Product) => {
-      const existing = cart.find((i) => i.id === p.id);
-      if (existing && existing.quantity >= p.stock) {
-        toast.error(`المخزون غير كافٍ. المتاح: ${p.stock}`);
-        return;
-      }
-      setCart((prev) =>
-        existing
-          ? prev.map((i) =>
-              i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i,
-            )
-          : [...prev, { ...p, quantity: 1 }],
-      );
-    },
-    [cart],
-  );
-
-  const updateQuantity = useCallback(
-    (id: string, q: number) => {
-      const p = products.find((prod) => prod.id === id);
-      if (p && q > p.stock) {
-        toast.error("تجاوز المخزن");
-        return;
-      }
-      setCart((prev) =>
-        q <= 0
-          ? prev.filter((i) => i.id !== id)
-          : prev.map((i) => (i.id === id ? { ...i, quantity: q } : i)),
-      );
-    },
-    [products],
-  );
+  const updateQuantity = useCallback((id: string, q: number) => {
+    setCart((prev) =>
+      q <= 0
+        ? prev.filter((i) => i.id !== id)
+        : prev.map((i) => (i.id === id ? { ...i, quantity: q } : i)),
+    );
+  }, []);
 
   const completeSale = async (
-    paymentMethod: "cash" | "card" | "mobile",
-    cashierId: string,
-    customerPhone: string,
-    customerName: string,
-    amountPaid = 0,
-    changeDue = 0,
-    discountAmount = 0,
+    pm: "cash" | "card" | "mobile",
+    cid: string,
+    cp: string,
+    cn: string,
+    ap = 0,
+    cd = 0,
+    da = 0,
   ) => {
     try {
       const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-      const vat = (subtotal - discountAmount) * 0.15;
-      const total = subtotal - discountAmount + vat;
-
+      const vat = (subtotal - da) * 0.15;
+      const total = subtotal - da + vat;
       const { data: order, error } = await supabase
         .from("orders")
         .insert([
@@ -242,11 +188,11 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             receipt_number: `ORG-${Date.now().toString(36).toUpperCase()}`,
             total_amount: total,
             vat_amount: vat,
-            discount_amount: discountAmount,
-            payment_method: paymentMethod,
-            cashier_id: cashierId,
-            amount_paid: amountPaid,
-            change_due: changeDue,
+            discount_amount: da,
+            payment_method: pm,
+            cashier_id: cid,
+            amount_paid: ap,
+            change_due: cd,
             status: "completed",
           },
         ])
@@ -254,17 +200,18 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         .single();
 
       if (error) throw error;
-
       for (const item of cart) {
-        await supabase.from("order_items").insert([
-          {
-            order_id: order.id,
-            product_id: item.id,
-            quantity: item.quantity,
-            unit_price: item.price,
-            total_price: item.price * item.quantity,
-          },
-        ]);
+        await supabase
+          .from("order_items")
+          .insert([
+            {
+              order_id: order.id,
+              product_id: item.id,
+              quantity: item.quantity,
+              unit_price: item.price,
+              total_price: item.price * item.quantity,
+            },
+          ]);
         const p = products.find((prod) => prod.id === item.id);
         if (p)
           await supabase
@@ -272,19 +219,19 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             .update({ stock: p.stock - item.quantity })
             .eq("id", item.id);
       }
-
-      clearCart();
-      await fetchInitialData(); // تحديث المبيعات فوراً لتظهر في Dashboard
+      setCart([]);
+      setTempCustomer({ name: "", phone: "" });
+      setCartDiscount(0);
+      fetchInitialData();
       return {
         ...order,
         items: cart as SaleItem[],
-        customerName,
-        customerPhone,
+        customerName: cn,
+        customerPhone: cp,
         total,
         date: order.created_at,
       };
-    } catch (e) {
-      toast.error("خطأ في إتمام البيع");
+    } catch {
       return null;
     }
   };
@@ -295,24 +242,25 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     cn: string,
     da: number,
   ) => {
-    try {
-      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-      const vat = (subtotal - da) * 0.15;
-      const { data: quo, error } = await supabase
-        .from("quotations")
-        .insert([
-          {
-            receipt_number: `QUO-${Date.now().toString(36).toUpperCase()}`,
-            total_amount: subtotal - da + vat,
-            vat_amount: vat,
-            discount_amount: da,
-            status: "pending",
-          },
-        ])
-        .select()
-        .single();
-      if (error) return false;
-      await supabase.from("quotation_items").insert(
+    const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const vat = (subtotal - da) * 0.15;
+    const { data: quo, error } = await supabase
+      .from("quotations")
+      .insert([
+        {
+          receipt_number: `QUO-${Date.now().toString(36).toUpperCase()}`,
+          total_amount: subtotal - da + vat,
+          vat_amount: vat,
+          discount_amount: da,
+          status: "pending",
+        },
+      ])
+      .select()
+      .single();
+    if (error) return false;
+    await supabase
+      .from("quotation_items")
+      .insert(
         cart.map((i) => ({
           quotation_id: quo.id,
           product_id: i.id,
@@ -321,85 +269,67 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
           total_price: i.price * i.quantity,
         })),
       );
-      clearCart();
-      return true;
-    } catch {
-      return false;
-    }
+    setCart([]);
+    return true;
   };
 
-  const deleteQuotation = async (id: string) => {
-    const { error } = await supabase.from("quotations").delete().eq("id", id);
-    if (!error) toast.success("تم الحذف");
-    return !error;
+  const value: POSContextType = {
+    products,
+    cart,
+    customers,
+    sales,
+    cartTotal: cart.reduce((s, i) => s + i.price * i.quantity, 0),
+    cartCount: cart.reduce((s, i) => s + i.quantity, 0),
+    cartDiscount,
+    setCartDiscount,
+    tempCustomer,
+    setTempCustomer,
+    addToCart,
+    removeFromCart: (id) => updateQuantity(id, 0),
+    updateQuantity,
+    clearCart: () => setCart([]),
+    findCustomerByPhone: (p) => customers.find((c) => c.phone === p),
+    completeSale,
+    saveQuotation,
+    deleteQuotation: async (id) => {
+      const { error } = await supabase.from("quotations").delete().eq("id", id);
+      return !error;
+    },
+    loadQuotationToCart: (items, n, p, d) => {
+      setCart(
+        items
+          .filter((i) => i.products)
+          .map((i) => ({ ...i.products!, quantity: i.quantity })),
+      );
+      setTempCustomer({ name: n, phone: p });
+      setCartDiscount(d);
+    },
+    updateProduct: async (p) => {
+      const { error } = await supabase
+        .from("products")
+        .update(p)
+        .eq("id", p.id);
+      if (!error) fetchInitialData();
+      return !error;
+    },
+    addProduct: async (p) => {
+      const { error } = await supabase.from("products").insert([p]);
+      if (!error) fetchInitialData();
+      return !error;
+    },
+    deleteProduct: async (id) => {
+      const { error } = await supabase.from("products").delete().eq("id", id);
+      if (!error) fetchInitialData();
+      return !error;
+    },
+    fetchInitialData,
   };
 
-  const updateProduct = async (p: Product) => {
-    const { error } = await supabase.from("products").update(p).eq("id", p.id);
-    if (!error) await fetchInitialData();
-    return !error;
-  };
-
-  const addProduct = async (p: Omit<Product, "id">) => {
-    const { error } = await supabase.from("products").insert([p]);
-    if (!error) await fetchInitialData();
-    return !error;
-  };
-  const channel = supabase
-    .channel("schema-db-changes")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "products" },
-      () => {
-        fetchInitialData(); // أول ما يحصل تغيير في المنتجات، نحدث البيانات أوتوماتيك
-      },
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-  const deleteProduct = async (id: string) => {
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (!error) await fetchInitialData();
-    return !error;
-  };
-
-  return (
-    <POSContext.Provider
-      value={{
-        products,
-        cart,
-        customers,
-        sales,
-        cartDiscount,
-        setCartDiscount,
-        tempCustomer,
-        setTempCustomer,
-        cartTotal: cart.reduce((s, i) => s + i.price * i.quantity, 0),
-        cartCount: cart.reduce((s, i) => s + i.quantity, 0),
-        addToCart,
-        removeFromCart: (id) => updateQuantity(id, 0),
-        updateQuantity,
-        clearCart,
-        findCustomerByPhone: (p) => customers.find((c) => c.phone === p),
-        completeSale,
-        saveQuotation,
-        deleteQuotation,
-        loadQuotationToCart,
-        updateProduct,
-        addProduct,
-        deleteProduct,
-        fetchInitialData,
-      }}
-    >
-      {children}
-    </POSContext.Provider>
-  );
+  return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
 };
 
-export function usePOS() {
+export const usePOS = () => {
   const context = useContext(POSContext);
-  if (!context) throw new Error("usePOS error");
+  if (!context) throw new Error("usePOS must be used within a POSProvider");
   return context;
-}
+};
