@@ -154,10 +154,13 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
         <div className="flex flex-col items-center gap-1">
           <Barcode
             value={receiptNo}
-            width={1.0}
-            height={30}
-            fontSize={10}
-            margin={0}
+            width={1.5}
+            height={40}
+            fontSize={12}
+            margin={10}
+            background="#ffffff"
+            lineColor="#000000"
+            displayValue={true}
           />
           <p className="text-center font-bold mt-2 text-[11px]">
             شكراً لزيارتكم! Orange Group

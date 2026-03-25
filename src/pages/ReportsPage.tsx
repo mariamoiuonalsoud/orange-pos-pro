@@ -128,10 +128,13 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
         <div className="flex flex-col items-center gap-2">
           <Barcode
             value={sale.receiptNumber}
-            width={1.2}
+            width={1.5}
             height={40}
-            fontSize={10}
-            margin={0}
+            fontSize={12}
+            margin={10}
+            background="#ffffff"
+            lineColor="#000000"
+            displayValue={true}
           />
           <p className="text-[10px] font-bold mt-2 text-center">
             شكراً لزيارتكم! Orange Group
