@@ -7,24 +7,38 @@ interface ReceiptProps {
   sale: SaleWithCustomer | null;
 }
 
+// تعريف النوع ليتوافق مع بيانات الداتابيز وواجهة المستخدم بدون استخدام any
+type SaleWithDBFields = SaleWithCustomer & {
+  receipt_number?: string;
+  payment_method?: string;
+  amount_paid?: number;
+  change_due?: number;
+  discount_amount?: number;
+  total_amount?: number;
+  vat_amount?: number;
+};
+
 export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
   ({ sale }, ref) => {
     const { user } = useAuth();
 
     if (!sale || !sale.items) return null;
 
-    const rawSale = sale as SaleWithCustomer & { receipt_number?: string };
+    // هنا استبدلنا any بنوع محدد SaleWithDBFields
+    const rawSale = sale as SaleWithDBFields;
+
     const receiptNo =
       sale.receiptNumber || rawSale.receipt_number || "ORG-0000";
-
-    const finalTotal = sale.total || 0;
-    const discount = sale.discountAmount || 0;
+    const paymentMethod = sale.paymentMethod || rawSale.payment_method;
+    const amountPaid = sale.amountPaid || rawSale.amount_paid || 0;
+    const changeDue = sale.changeDue || rawSale.change_due || 0;
+    const discount = sale.discountAmount || rawSale.discount_amount || 0;
+    const finalTotal = sale.total || rawSale.total_amount || 0;
+    const vatAmount =
+      sale.vatAmount !== undefined ? sale.vatAmount : rawSale.vat_amount;
 
     const tax =
-      sale.vatAmount !== undefined
-        ? sale.vatAmount
-        : finalTotal - finalTotal / 1.15;
-
+      vatAmount !== undefined ? vatAmount : finalTotal - finalTotal / 1.15;
     const amountAfterDiscount = finalTotal - tax;
     const subtotalBeforeDiscount = amountAfterDiscount + discount;
 
@@ -115,23 +129,23 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
           <div className="flex justify-between">
             <span>طريقة الدفع:</span>
             <span className="font-bold">
-              {sale.paymentMethod === "cash"
+              {paymentMethod === "cash"
                 ? "نقداً"
-                : sale.paymentMethod === "card"
+                : paymentMethod === "card"
                   ? "بطاقة"
                   : "محفظة"}
             </span>
           </div>
 
-          {sale.paymentMethod === "cash" && (
+          {paymentMethod === "cash" && (
             <div className="bg-gray-100 p-2 mt-1 rounded-sm border border-black/5">
               <div className="flex justify-between">
                 <span>المبلغ المدفوع:</span>
-                <span>{sale.amountPaid?.toFixed(2)} ج.م</span>
+                <span>{amountPaid.toFixed(2)} ج.م</span>
               </div>
               <div className="flex justify-between font-bold border-t border-black/10 mt-1 pt-1">
                 <span>الباقي:</span>
-                <span>{(sale.changeDue || 0).toFixed(2)} ج.م</span>
+                <span>{changeDue.toFixed(2)} ج.م</span>
               </div>
             </div>
           )}
@@ -150,35 +164,14 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
           </p>
         </div>
 
-        {/* الـ CSS الموحد لمنع الفواصل */}
         <style type="text/css" media="print">
           {`
-            @page { 
-              size: 80mm auto !important; 
-              margin: 0 !important; 
-            }
+            @page { size: 80mm auto !important; margin: 0 !important; }
             @media print {
-              html, body {
-                width: 80mm !important; 
-                margin: 0 !important;
-                padding: 0 !important; 
-                height: auto !important;
-                overflow: visible !important;
-              }
-              .receipt-print-area {
-                display: block !important;
-                width: 100% !important;
-                height: auto !important;
-                overflow: visible !important;
-                page-break-inside: auto !important;
-              }
-              tr, td, th {
-                page-break-inside: avoid !important;
-              }
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
+              html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
+              .receipt-print-area { display: block !important; width: 100% !important; height: auto !important; overflow: visible !important; }
+              tr, td, th { page-break-inside: avoid !important; }
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
           `}
         </style>

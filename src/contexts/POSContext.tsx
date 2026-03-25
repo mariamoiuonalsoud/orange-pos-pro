@@ -10,7 +10,6 @@ import { CartItem, Product, Sale } from "@/data/pos-data";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 
-// --- الواجهات (Interfaces) ---
 export interface Customer {
   id: string;
   name: string;
@@ -80,7 +79,7 @@ interface POSContextType {
   updateProduct: (p: Product) => Promise<boolean>;
   addProduct: (p: Omit<Product, "id">) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<boolean>;
-  addCustomer: (customer: Omit<Customer, "id">) => Promise<boolean>; // الدالة الجديدة
+  addCustomer: (customer: Omit<Customer, "id">) => Promise<boolean>;
   fetchInitialData: () => Promise<void>;
   refundItem: (
     orderId: string,
@@ -131,6 +130,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
             customerName: customer?.name || "عميل عام",
             customerPhone: customer?.phone || "---",
             status: o.status,
+            amountPaid: o.amount_paid,
+            changeDue: o.change_due,
+            discountAmount: o.discount_amount,
+            vatAmount: o.vat_amount,
             items: items
               .filter((i) => i.order_id === o.id)
               .map((i) => ({
@@ -202,7 +205,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     da = 0,
   ): Promise<SaleWithCustomer | null> => {
     try {
-      // 1. تسجيل أو تحديث بيانات العميل أولاً
       let customerId: string | null = null;
       if (cp && cn) {
         const { data: custData, error: custError } = await supabase
@@ -216,12 +218,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // 2. حسابات الفاتورة
       const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
       const vat = (subtotal - da) * 0.15;
       const total = subtotal - da + vat;
 
-      // 3. إنشاء الفاتورة مع ربط معرف العميل
       const { data: order, error } = await supabase
         .from("orders")
         .insert([
@@ -243,7 +243,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      // 4. حفظ المنتجات وخصم المخزون
       for (const item of cart) {
         await supabase.from("order_items").insert([
           {
@@ -268,8 +267,15 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       setCartDiscount(0);
       await fetchInitialData();
 
+      // --- التعديل هنا لعمل Mapping من الـ Order الراجع من Supabase ---
       return {
         ...order,
+        receiptNumber: order.receipt_number,
+        paymentMethod: order.payment_method,
+        amountPaid: order.amount_paid,
+        changeDue: order.change_due,
+        vatAmount: order.vat_amount,
+        discountAmount: order.discount_amount,
         items: cart as SaleItem[],
         customerName: cn,
         customerPhone: cp,
@@ -288,7 +294,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     da: number,
   ): Promise<boolean> => {
     try {
-      // 1. تسجيل أو تحديث بيانات العميل
       let customerId: string | null = null;
       if (cp && cn) {
         const { data: custData, error: custError } = await supabase
@@ -305,7 +310,6 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
       const vat = (subtotal - da) * 0.15;
 
-      // 2. إنشاء عرض السعر مع ربط العميل
       const { data: quo, error } = await supabase
         .from("quotations")
         .insert([
@@ -380,26 +384,21 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     return !error;
   };
 
-  // --- الدالة الجديدة لإضافة العميل ---
   const addCustomer = async (customer: Omit<Customer, "id">) => {
     try {
       const { name, phone } = customer;
-
-      // خطوة استباقية: التأكد إن العميل مش مسجل بنفس رقم التليفون مسبقاً
       const isPhoneExists = customers.some((c) => c.phone === phone);
       if (isPhoneExists) {
         toast.error("رقم الهاتف مسجل لعميل آخر بالفعل!");
         return false;
       }
 
-      // إدخال البيانات في الداتابيز
       const { error } = await supabase
         .from("customers")
         .insert([{ name, phone }]);
 
       if (error) throw error;
 
-      // تحديث البيانات في الـ Context عشان يظهر العميل الجديد فوراً
       await fetchInitialData();
       toast.success("تم إضافة العميل بنجاح!");
       return true;
@@ -531,7 +530,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     updateProduct,
     addProduct,
     deleteProduct,
-    addCustomer, // تمت الإضافة هنا
+    addCustomer,
     fetchInitialData,
     refundItem,
   };
