@@ -163,6 +163,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
   const addToCart = useCallback(
     (p: Product) => {
+      if (p.stock <= 0) {
+        toast.error("نفذ المخزون!");
+        return;
+      }
       const existing = cart.find((i) => i.id === p.id);
       if (existing && existing.quantity >= p.stock) {
         toast.error("نفذ المخزون!");
