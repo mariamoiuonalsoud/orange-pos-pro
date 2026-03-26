@@ -38,7 +38,7 @@ const QuotationsPage = () => {
     null,
   );
 
-  // حالات مودال الحذف
+  // حالات مودال الحذف التقليدي
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [quoteToDelete, setQuoteToDelete] = useState<string | null>(null);
 
@@ -47,7 +47,6 @@ const QuotationsPage = () => {
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchQuotes = async () => {
-    // التأكد من جلب بيانات العملاء بشكل صحيح من جدول الـ customers
     const { data, error } = await supabase
       .from("quotations")
       .select(
@@ -86,15 +85,31 @@ const QuotationsPage = () => {
       q.customers?.phone?.includes(searchTerm),
   );
 
-  const handleConvert = (quote: FullQuotation) => {
-    loadQuotationToCart(
-      quote.quotation_items,
-      quote.customers?.name || "عميل",
-      quote.customers?.phone || "",
-      quote.discount_amount,
-    );
-    toast.success("تم تجهيز بيانات العميل والخصم.. جاري التحويل");
-    setTimeout(() => navigate("/pos"), 500);
+  // التعديل الرئيسي: حذف العرض بعد تحميله للسلة
+  const handleConvert = async (quote: FullQuotation) => {
+    try {
+      // 1. تحميل البيانات للسلة (في الـ Context)
+      loadQuotationToCart(
+        quote.quotation_items,
+        quote.customers?.name || "عميل",
+        quote.customers?.phone || "",
+        quote.discount_amount,
+      );
+
+      // 2. حذف عرض السعر من قاعدة البيانات لضمان عدم تكراره
+      const success = await deleteQuotation(quote.id);
+
+      if (success) {
+        toast.success("تم تحويل العرض بنجاح وحذفه من القائمة");
+        // 3. الانتقال لصفحة البيع بعد التأكد من الحذف
+        setTimeout(() => navigate("/pos"), 300);
+      } else {
+        toast.error("فشل حذف العرض القديم، يرجى المحاولة مرة أخرى");
+      }
+    } catch (err) {
+      console.error("Conversion error:", err);
+      toast.error("حدث خطأ أثناء عملية التحويل");
+    }
   };
 
   const confirmDelete = async () => {
@@ -112,7 +127,6 @@ const QuotationsPage = () => {
   return (
     <div className="min-h-screen bg-background pb-10 text-right" dir="rtl">
       <POSHeader />
-
       <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -145,7 +159,6 @@ const QuotationsPage = () => {
                     </span>
                   </div>
 
-                  {/* قسم بيانات العميل المعدل */}
                   <div className="flex flex-wrap gap-6 mt-3 font-bold">
                     <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-lg border border-border/50">
                       <User size={18} className="text-primary" />
@@ -219,8 +232,7 @@ const QuotationsPage = () => {
           )}
         </div>
       </div>
-
-      {/* مودال الحذف الاحترافي */}
+      {/* مودال الحذف */}
       <AnimatePresence>
         {isDeleteDialogOpen && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -240,7 +252,6 @@ const QuotationsPage = () => {
                     />
                   </div>
                 </div>
-
                 <h3 className="text-2xl font-black mb-2 text-foreground">
                   تأكيد حذف العرض
                 </h3>
@@ -251,7 +262,6 @@ const QuotationsPage = () => {
                   </span>
                 </p>
               </div>
-
               <div className="flex gap-3 p-6 bg-muted/30 border-t border-border">
                 <Button
                   variant="outline"
@@ -271,12 +281,12 @@ const QuotationsPage = () => {
           </div>
         )}
       </AnimatePresence>
-
       <div className="hidden">
         {selectedQuote && (
           <QuotationReceipt ref={printRef} quote={selectedQuote} />
         )}
       </div>
+      gi
     </div>
   );
 };
