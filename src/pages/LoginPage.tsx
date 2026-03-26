@@ -68,6 +68,7 @@ const LoginPage = () => {
               </span>
               <Input
                 type="text"
+                data-testid="login-username-input"
                 value={username}
                 onChange={(e) => {
                   setUsername(e.target.value);
@@ -88,6 +89,7 @@ const LoginPage = () => {
               <Input
                 // هنا بنغير نوع الحقل بناءً على حالة الـ state
                 type={showPassword ? "text" : "password"}
+                data-testid="login-password-input"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
