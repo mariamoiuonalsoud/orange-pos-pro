@@ -6,17 +6,64 @@ import {
   Plus,
   Trash2,
   X,
-  Save,
   Users,
   Eye,
   AlertTriangle,
   Lock,
   Key,
   RefreshCw,
+  Check,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
+// دالة التحقق من قوة كلمة المرور (للاستخدام في البرمجة)
+const validatePassword = (password: string) => {
+  const minLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+  return minLength && hasUpper && hasLower && hasNumber && hasSpecial;
+};
+
+// مكون واجهة المستخدم لعرض شروط الباسوورد بشكل تفاعلي
+const PasswordRules = ({ password }: { password: string }) => {
+  const rules = [
+    { id: 1, label: "8 أحرف على الأقل", valid: password.length >= 8 },
+    { id: 2, label: "حرف كبير (A-Z)", valid: /[A-Z]/.test(password) },
+    { id: 3, label: "حرف صغير (a-z)", valid: /[a-z]/.test(password) },
+    { id: 4, label: "رقم (0-9)", valid: /[0-9]/.test(password) },
+    {
+      id: 5,
+      label: "رمز خاص (مثل !@#$%)",
+      valid: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password),
+    },
+  ];
+
+  return (
+    <div className="mt-3 p-3 bg-muted/30 rounded-lg border text-sm w-full">
+      <p className="font-semibold mb-2 text-muted-foreground text-xs">
+        شروط كلمة المرور:
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {rules.map((rule) => (
+          <div
+            key={rule.id}
+            className={`flex items-center gap-2 transition-colors duration-300 ${
+              rule.valid ? "text-green-600" : "text-muted-foreground/70"
+            }`}
+          >
+            {rule.valid ? <Check size={14} /> : <X size={14} />}
+            <span className="text-xs">{rule.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const UsersPage = () => {
   const {
@@ -62,6 +109,12 @@ const UsersPage = () => {
       toast.error("برجاء إدخال جميع البيانات");
       return;
     }
+
+    if (!validatePassword(form.password)) {
+      toast.error("يرجى استيفاء جميع شروط كلمة المرور أولاً.");
+      return;
+    }
+
     const success = await addUser(form);
     if (success) {
       setForm({ name: "", username: "", password: "", role: "cashier" });
@@ -74,6 +127,12 @@ const UsersPage = () => {
       toast.error("برجاء إدخال كلمة المرور الجديدة");
       return;
     }
+
+    if (!validatePassword(newPassword)) {
+      toast.error("يرجى استيفاء جميع شروط كلمة المرور أولاً.");
+      return;
+    }
+
     setIsUpdating(true);
     const success = await updatePassword(viewingUser.id, newPassword);
     if (success) {
@@ -123,7 +182,8 @@ const UsersPage = () => {
                   <X size={20} />
                 </button>
               </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
                 <Input
                   placeholder="الاسم"
                   value={form.name}
@@ -155,7 +215,13 @@ const UsersPage = () => {
                   <option value="admin">مدير نظام</option>
                 </select>
               </div>
-              <Button onClick={handleAdd} className="mt-4 bg-primary">
+
+              {/* عرض شروط الباسوورد عند الإضافة (تظهر فقط عند البدء في الكتابة أو التركيز) */}
+              <div className="mb-4">
+                <PasswordRules password={form.password} />
+              </div>
+
+              <Button onClick={handleAdd} className="bg-primary">
                 حفظ الموظف
               </Button>
             </motion.div>
@@ -224,7 +290,7 @@ const UsersPage = () => {
         </div>
       </div>
 
-      {/* Modal عرض وإعادة تعيين كلمة السر (فقط) */}
+      {/* Modal عرض وإعادة تعيين كلمة السر */}
       <AnimatePresence>
         {viewingUser && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -256,15 +322,21 @@ const UsersPage = () => {
                   إعادة تعيين (Reset) كلمة سر جديدة:
                 </label>
                 <Input
+                  type="password"
                   placeholder="اكتب الكلمة الجديدة هنا..."
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="text-center font-mono"
+                  dir="ltr"
                 />
+
+                {/* عرض شروط الباسوورد في الـ Modal */}
+                <PasswordRules password={newPassword} />
+
                 <Button
                   onClick={handleResetPassword}
                   disabled={isUpdating}
-                  className="w-full mt-3 bg-orange-600 hover:bg-orange-700 text-white gap-2"
+                  className="w-full mt-4 bg-orange-600 hover:bg-orange-700 text-white gap-2"
                 >
                   {isUpdating ? (
                     <RefreshCw className="animate-spin" size={16} />
