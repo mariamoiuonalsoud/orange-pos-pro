@@ -113,7 +113,7 @@ test("complete sale journey with barcode scanner simulation", async ({
   await mockSupabase(page);
 
   await page.goto("http://localhost:8080/");
-
+  await page.waitForSelector('[data-testid="login-username-input"]', { state: 'visible', timeout: 15000 });
   await page.getByTestId("login-username-input").fill("cashier");
   await page.getByTestId("login-password-input").fill("1234");
   await page.getByRole("button", { name: "دخول" }).click();
