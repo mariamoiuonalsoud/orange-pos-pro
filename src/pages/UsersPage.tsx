@@ -83,7 +83,7 @@ const UsersPage: React.FC = () => {
     role: "cashier" as UserRole,
   });
 
-  const MASTER_ADMIN_USERNAME = "orange_admin@";
+  const MASTER_ADMIN_USERNAME = "orange_admin";
 
   useEffect(() => {
     if (currentUser) fetchUsers();
