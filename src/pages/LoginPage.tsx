@@ -18,14 +18,14 @@ const LoginPage = () => {
     e.preventDefault();
 
     if (!username || !password) {
-      setError("برجاء إدخال اسم المستخدم وكلمة المرور");
+      setError("برجاء إدخال الايميل وكلمة المرور");
       return;
     }
 
     const success = await login(username, password);
 
     if (!success) {
-      setError("اسم المستخدم أو كلمة المرور غير صحيحة");
+      setError("الايميل أو كلمة المرور غير صحيحة");
       setPassword("");
     }
   };
@@ -60,7 +60,7 @@ const LoginPage = () => {
         <form onSubmit={handleLogin} className="flex flex-col gap-4 text-right">
           <div>
             <label className="block text-sm font-medium mb-1 text-foreground">
-              اسم المستخدم
+              الايميل
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">

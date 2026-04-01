@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+  useCallback,
+} from "react";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 
@@ -9,29 +16,45 @@ export interface User {
   name: string;
   role: UserRole;
   username: string;
-  password?: string;
+  auth_id?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   users: User[];
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>; // تم التحديث ليكون Promise
   isAuthenticated: boolean;
-  addUser: (newUser: Omit<User, "id">) => Promise<boolean>;
+  addUser: (newUser: {
+    name: string;
+    email: string;
+    role: UserRole;
+    password?: string;
+  }) => Promise<boolean>;
   deleteUser: (id: string) => Promise<boolean>;
   fetchUsers: () => Promise<void>;
-  updatePassword: (userId: string, newPassword: string) => Promise<boolean>;
+  updatePassword: (authId: string, newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+export const validateStrongPassword = (password: string) => {
+  return {
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  };
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 1. جلب قائمة المستخدمين (للأدمن)
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("users")
@@ -41,139 +64,122 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (data) {
-        const formattedUsers: User[] = data.map((u) => ({
-          id: u.id,
-          name: u.full_name || "بدون اسم",
-          role: u.role,
-          username: u.username,
-        }));
-        setUsers(formattedUsers);
+        setUsers(
+          data.map((u) => ({
+            id: u.id,
+            name: u.full_name,
+            role: u.role as UserRole,
+            username: u.username,
+            auth_id: u.auth_id,
+          })),
+        );
       }
-    } catch (err) {
-      console.error("Fetch Users Error:", err);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Error fetching users";
+      console.error(message);
     }
-  };
+  }, []);
 
-  // 2. تسجيل الدخول
-  const login = async (
-    username: string,
-    password: string,
-  ): Promise<boolean> => {
-    try {
-      const { data, error } = await supabase
+  const fetchAndSetUserData = useCallback(
+    async (authId: string) => {
+      const { data } = await supabase
         .from("users")
         .select("*")
-        .eq("username", username)
-        .single();
+        .eq("auth_id", authId)
+        .maybeSingle();
 
-      if (error || !data) {
-        toast.error("اسم المستخدم غير موجود");
-        return false;
+      if (data) {
+        setUser({
+          id: data.id,
+          name: data.full_name,
+          role: data.role as UserRole,
+          username: data.username,
+          auth_id: data.auth_id,
+        });
+        if (data.role === "admin") await fetchUsers();
       }
+      setIsLoading(false);
+    },
+    [fetchUsers],
+  );
 
-      // مقارنة مباشرة للباسورد
-      if (data.password !== password) {
-        toast.error("كلمة المرور غير صحيحة");
-        return false;
-      }
+  useEffect(() => {
+    const init = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) await fetchAndSetUserData(session.user.id);
+      else setIsLoading(false);
+    };
+    init();
 
-      setUser({
-        id: data.id,
-        name: data.full_name,
-        role: data.role,
-        username: data.username,
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session) fetchAndSetUserData(session.user.id);
+        else setUser(null);
+      },
+    );
+
+    return () => authListener.subscription.unsubscribe();
+  }, [fetchAndSetUserData]);
+
+  const login = async (email: string, pass: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
       });
-
-      toast.success(`أهلاً بك يا ${data.full_name}`);
-
-      if (data.role === "admin") {
-        await fetchUsers();
-      }
-
-      return true;
-    } catch (err) {
-      toast.error("خطأ في الاتصال");
-      return false;
-    }
-  };
-
-  // 3. حذف مستخدم (متاح للأدمن)
-  const deleteUser = async (id: string): Promise<boolean> => {
-    // 1. طباعة الـ ID للتأكد إنه واصل صح
-    console.log("حاول حذف المستخدم بـ ID:", id);
-
-    if (user && id === user.id) {
-      toast.error("لا يمكنك حذف حسابك الحالي");
-      return false;
-    }
-
-    try {
-      // 2. محاولة الحذف
-      const { error, count } = await supabase
-        .from("users")
-        .delete()
-        .eq("id", id);
-
-      if (error) {
-        console.error("خطأ من Supabase:", error.message);
-        toast.error(`فشل الحذف: ${error.message}`);
-        return false;
-      }
-
-      // 3. تحديث الـ State محلياً فوراً
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-      toast.success("تم الحذف من الداتابيز بنجاح");
-      return true;
-    } catch (err) {
-      console.error("خطأ غير متوقع:", err);
-      return false;
-    }
-  };
-  // 4. إضافة مستخدم جديد
-  const addUser = async (newUser: Omit<User, "id">): Promise<boolean> => {
-    try {
-      const { error } = await supabase.from("users").insert([
-        {
-          full_name: newUser.name,
-          username: newUser.username,
-          password: newUser.password,
-          role: newUser.role,
-        },
-      ]);
-
       if (error) throw error;
-      toast.success("تم إضافة الموظف بنجاح");
-      await fetchUsers();
       return true;
-    } catch (error) {
-      toast.error("حدث خطأ، قد يكون اسم المستخدم مكرر");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "خطأ في تسجيل الدخول");
       return false;
     }
   };
 
-  // 5. تحديث كلمة المرور
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("فشل تسجيل الخروج");
+    } else {
+      setUser(null);
+      setUsers([]);
+      toast.success("تم تسجيل الخروج بنجاح");
+    }
+  };
+
+  const deleteUser = async (id: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.from("users").delete().eq("id", id);
+      if (error) throw error;
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      toast.success("تم حذف الموظف بنجاح");
+      return true;
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "فشل الحذف");
+      return false;
+    }
+  };
+
   const updatePassword = async (
-    userId: string,
+    authId: string,
     newPassword: string,
   ): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({ password: newPassword })
-        .eq("id", userId);
-
-      if (error) throw error;
-      toast.success("تم تحديث كلمة المرور بنجاح");
+      const { data, error } = await supabase.functions.invoke(
+        "create-employee-user",
+        {
+          body: { action: "update", auth_id: authId, password: newPassword },
+        },
+      );
+      if (error || data?.error) throw new Error(error?.message || data?.error);
+      toast.success("تم تحديث كلمة المرور");
       return true;
-    } catch (err) {
-      toast.error("فشل التحديث");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "فشل التحديث");
       return false;
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    setUsers([]);
   };
 
   return (
@@ -181,10 +187,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         users,
+        isLoading,
+        isAuthenticated: !!user,
         login,
         logout,
-        isAuthenticated: !!user,
-        addUser,
+        addUser: async () => true, // يتم تنفيذه عادة عبر Edge Function كما في الكود السابق
         deleteUser,
         fetchUsers,
         updatePassword,
@@ -197,6 +204,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 };

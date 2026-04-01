@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useAuth, UserRole, User } from "@/contexts/AuthContext";
+import {
+  useAuth,
+  UserRole,
+  User,
+  validateStrongPassword,
+} from "@/contexts/AuthContext";
 import POSHeader from "@/components/POSHeader";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,343 +12,414 @@ import {
   Trash2,
   X,
   Users,
-  Eye,
-  AlertTriangle,
-  Lock,
   Key,
   RefreshCw,
   Check,
+  Lock as LockIcon,
+  AlertTriangle, // أيقونة التحذير الجديدة
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { supabase } from "../lib/supabase";
 
-// دالة التحقق من قوة كلمة المرور (للاستخدام في البرمجة)
-const validatePassword = (password: string) => {
-  const minLength = password.length >= 8;
-  const hasUpper = /[A-Z]/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+// واجهة بيانات فحص كلمة المرور
+interface PasswordChecks {
+  length: boolean;
+  upper: boolean;
+  lower: boolean;
+  number: boolean;
+  special: boolean;
+}
 
-  return minLength && hasUpper && hasLower && hasNumber && hasSpecial;
-};
-
-// مكون واجهة المستخدم لعرض شروط الباسوورد بشكل تفاعلي
-const PasswordRules = ({ password }: { password: string }) => {
+const PasswordRules = ({ checks }: { checks: PasswordChecks }) => {
   const rules = [
-    { id: 1, label: "8 أحرف على الأقل", valid: password.length >= 8 },
-    { id: 2, label: "حرف كبير (A-Z)", valid: /[A-Z]/.test(password) },
-    { id: 3, label: "حرف صغير (a-z)", valid: /[a-z]/.test(password) },
-    { id: 4, label: "رقم (0-9)", valid: /[0-9]/.test(password) },
-    {
-      id: 5,
-      label: "رمز خاص (مثل !@#$%)",
-      valid: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password),
-    },
+    { label: "8 أحرف", valid: checks.length },
+    { label: "حرف كبير", valid: checks.upper },
+    { label: "حرف صغير", valid: checks.lower },
+    { label: "رقم (0-9)", valid: checks.number },
+    { label: "رمز خاص", valid: checks.special },
   ];
 
   return (
-    <div className="mt-3 p-3 bg-muted/30 rounded-lg border text-sm w-full">
-      <p className="font-semibold mb-2 text-muted-foreground text-xs">
-        شروط كلمة المرور:
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {rules.map((rule) => (
-          <div
-            key={rule.id}
-            className={`flex items-center gap-2 transition-colors duration-300 ${
-              rule.valid ? "text-green-600" : "text-muted-foreground/70"
-            }`}
-          >
-            {rule.valid ? <Check size={14} /> : <X size={14} />}
-            <span className="text-xs">{rule.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-50">
+      {rules.map((rule, i) => (
+        <div
+          key={i}
+          className={`flex items-center gap-1.5 text-[12px] transition-colors ${
+            rule.valid ? "text-emerald-500 font-bold" : "text-slate-400"
+          }`}
+        >
+          {rule.valid ? <Check size={14} /> : <X size={14} />}
+          {rule.label}
+        </div>
+      ))}
     </div>
   );
 };
 
-const UsersPage = () => {
+const UsersPage: React.FC = () => {
   const {
     users,
-    addUser,
     deleteUser,
-    updatePassword,
     user: currentUser,
     fetchUsers,
+    updatePassword,
   } = useAuth();
 
   const [adding, setAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  const [userToDelete, setUserToDelete] = useState<User | null>(null); // للمودال الجديد
+  const [newPass, setNewPass] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeletingProcess, setIsDeletingProcess] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     username: "",
+    email: "",
     password: "",
     role: "cashier" as UserRole,
   });
 
-  const isMasterAdmin = currentUser?.username === "orange_admin";
+  const MASTER_ADMIN_USERNAME = "orange_admin@";
 
   useEffect(() => {
-    if (currentUser) {
-      fetchUsers();
-    }
+    if (currentUser) fetchUsers();
   }, [fetchUsers, currentUser]);
 
-  if (currentUser?.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4 text-destructive font-bold text-xl">
-        عفواً، ليس لديك صلاحية للدخول إلى هذه الصفحة.
-      </div>
-    );
-  }
+  const currentPassChecks: PasswordChecks = validateStrongPassword(
+    adding ? form.password : newPass,
+  );
+  const isPassValid = Object.values(currentPassChecks).every(Boolean);
 
-  const handleAdd = async () => {
-    if (!form.name || !form.username || !form.password) {
-      toast.error("برجاء إدخال جميع البيانات");
-      return;
+  const handleSave = async () => {
+    if (!form.name || !form.username || !form.email || !form.password) {
+      return toast.error("يرجى ملء جميع الحقول المطلوبة");
+    }
+    if (!isPassValid) {
+      return toast.error("كلمة المرور لا تستوفي الشروط الأمنية");
     }
 
-    if (!validatePassword(form.password)) {
-      toast.error("يرجى استيفاء جميع شروط كلمة المرور أولاً.");
-      return;
-    }
+    setIsSaving(true);
+    try {
+      const { data, error: functionError } = await supabase.functions.invoke(
+        "create-employee-user",
+        {
+          body: {
+            action: "create",
+            email: form.email,
+            password: form.password,
+            role: form.role,
+            full_name: form.name,
+          },
+        },
+      );
 
-    const success = await addUser(form);
-    if (success) {
-      setForm({ name: "", username: "", password: "", role: "cashier" });
+      if (functionError || data?.error)
+        throw new Error(functionError?.message || data?.error);
+
+      const { error: dbError } = await supabase.from("users").insert([
+        {
+          full_name: form.name,
+          username: form.username,
+          email: form.email,
+          role: form.role,
+          auth_id: data.userId,
+        },
+      ]);
+
+      if (dbError) throw dbError;
+
+      toast.success("تم إضافة الموظف بنجاح");
       setAdding(false);
+      setForm({
+        name: "",
+        username: "",
+        email: "",
+        password: "",
+        role: "cashier",
+      });
+      fetchUsers();
+    } catch (e: unknown) {
+      const error = e as Error;
+      toast.error(error.message || "حدث خطأ أثناء الحفظ");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!viewingUser || !newPassword) {
-      toast.error("برجاء إدخال كلمة المرور الجديدة");
-      return;
-    }
-
-    if (!validatePassword(newPassword)) {
-      toast.error("يرجى استيفاء جميع شروط كلمة المرور أولاً.");
-      return;
-    }
+  const handleUpdatePass = async () => {
+    if (!isPassValid) return toast.error("يجب اختيار كلمة مرور قوية");
+    if (!viewingUser?.auth_id) return toast.error("بيانات المستخدم غير مكتملة");
 
     setIsUpdating(true);
-    const success = await updatePassword(viewingUser.id, newPassword);
+    const success = await updatePassword(viewingUser.auth_id, newPass);
     if (success) {
-      setNewPassword("");
       setViewingUser(null);
+      setNewPass("");
     }
     setIsUpdating(false);
   };
 
   const confirmDelete = async () => {
-    if (userToDelete) {
+    if (!userToDelete) return;
+    setIsDeletingProcess(true);
+    try {
       await deleteUser(userToDelete.id);
       setUserToDelete(null);
+    } finally {
+      setIsDeletingProcess(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background text-right" dir="rtl">
+    <div className="min-h-screen bg-[#fcfcfc]" dir="rtl">
       <POSHeader />
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-foreground">
-            <Users className="w-6 h-6 text-primary" /> إدارة الموظفين
+      <div className="p-4 md:p-8 max-w-[1400px] mx-auto">
+        {/* Header Section */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-black flex items-center gap-3 text-slate-800">
+            <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+              <Users size={24} />
+            </div>
+            إدارة طاقم العمل
           </h1>
-          {isMasterAdmin && (
-            <Button
-              onClick={() => setAdding(true)}
-              className="bg-primary hover:bg-orange-600 transition-colors"
-            >
-              <Plus className="w-4 h-4 ml-2" /> إضافة موظف جديد
-            </Button>
-          )}
+          <Button
+            onClick={() => setAdding(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white rounded-2xl px-6 h-12 shadow-lg shadow-orange-200 transition-all active:scale-95"
+          >
+            <Plus size={18} className="ml-2" /> إضافة موظف جديد
+          </Button>
         </div>
 
-        {/* نموذج الإضافة */}
+        {/* Add Employee Form */}
         <AnimatePresence>
-          {adding && isMasterAdmin && (
+          {adding && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="bg-card border rounded-xl p-4 mb-6 shadow-sm overflow-hidden"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-white border border-slate-100 rounded-[2rem] p-8 mb-8 shadow-xl shadow-slate-200/50 relative"
             >
-              <div className="flex justify-between mb-4">
-                <h3 className="font-bold">إضافة موظف</h3>
-                <button onClick={() => setAdding(false)}>
-                  <X size={20} />
-                </button>
+              <button
+                onClick={() => setAdding(false)}
+                className="absolute top-6 left-6 text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <X size={24} />
+              </button>
+              <h3 className="font-bold mb-8 text-xl text-slate-800 flex items-center gap-2">
+                <Plus className="text-orange-500" size={20} /> بيانات الموظف
+                الجديد
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-600 mr-1">
+                    الاسم بالكامل
+                  </label>
+                  <Input
+                    placeholder="أدخل الاسم الثلاثي"
+                    className="h-13 rounded-xl border-slate-200 focus:ring-2 focus:ring-orange-500/20 transition-all"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-600 mr-1">
+                    اسم المستخدم
+                  </label>
+                  <Input
+                    placeholder="مثال: ahmed_24"
+                    className="h-13 rounded-xl border-slate-200 text-left"
+                    value={form.username}
+                    onChange={(e) =>
+                      setForm({ ...form, username: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-600 mr-1">
+                    البريد الإلكتروني
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="email@example.com"
+                    className="h-13 rounded-xl border-slate-200 text-left"
+                    value={form.email}
+                    onChange={(e) =>
+                      setForm({ ...form, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-600 mr-1">
+                    كلمة المرور
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    className="h-13 rounded-xl border-slate-200"
+                    value={form.password}
+                    onChange={(e) =>
+                      setForm({ ...form, password: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-600 mr-1">
+                    نوع الصلاحية
+                  </label>
+                  <select
+                    className="w-full h-13 border border-slate-200 rounded-xl px-4 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
+                    value={form.role}
+                    onChange={(e) =>
+                      setForm({ ...form, role: e.target.value as UserRole })
+                    }
+                  >
+                    <option value="cashier">كاشير</option>
+                    <option value="admin">مدير نظام</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-                <Input
-                  placeholder="الاسم"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-                <Input
-                  placeholder="اسم المستخدم"
-                  value={form.username}
-                  onChange={(e) =>
-                    setForm({ ...form, username: e.target.value })
-                  }
-                />
-                <Input
-                  type="password"
-                  placeholder="كلمة المرور"
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm({ ...form, password: e.target.value })
-                  }
-                />
-                <select
-                  className="border rounded-md px-3 h-10 text-sm bg-background text-foreground"
-                  value={form.role}
-                  onChange={(e) =>
-                    setForm({ ...form, role: e.target.value as UserRole })
-                  }
+              <PasswordRules checks={currentPassChecks} />
+
+              <div className="flex justify-end mt-8">
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="bg-slate-900 hover:bg-black text-white px-10 h-13 rounded-xl font-bold transition-all disabled:opacity-50"
                 >
-                  <option value="cashier">كاشير</option>
-                  <option value="admin">مدير نظام</option>
-                </select>
+                  {isSaving ? (
+                    <RefreshCw className="animate-spin ml-2" />
+                  ) : (
+                    <Check className="ml-2" />
+                  )}
+                  اعتماد وحفظ الموظف
+                </Button>
               </div>
-
-              {/* عرض شروط الباسوورد عند الإضافة (تظهر فقط عند البدء في الكتابة أو التركيز) */}
-              <div className="mb-4">
-                <PasswordRules password={form.password} />
-              </div>
-
-              <Button onClick={handleAdd} className="bg-primary">
-                حفظ الموظف
-              </Button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* الجدول */}
-        <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-right">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="p-4 text-sm font-semibold">الاسم</th>
-                <th className="p-4 text-sm font-semibold">اسم المستخدم</th>
-                <th className="p-4 text-sm font-semibold text-center">
-                  الصلاحية
+        {/* Users Table */}
+        <div className="bg-white border border-slate-100 rounded-[1.5rem] overflow-hidden shadow-sm">
+          <table className="w-full text-right border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="p-5 text-slate-500 font-bold">الموظف</th>
+                <th className="p-5 text-slate-500 font-bold">اسم المستخدم</th>
+                <th className="p-5 text-slate-500 font-bold text-center">
+                  الحالة
                 </th>
-                <th className="p-4 text-sm font-semibold text-center">
+                <th className="p-5 text-slate-500 font-bold text-center">
                   إجراءات
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border border-t">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="p-4 text-sm font-medium">{u.name}</td>
-                  <td className="p-4 text-sm font-mono text-muted-foreground">
-                    {u.username}
-                  </td>
-                  <td className="p-4 text-center">
-                    <span
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold ${u.role === "admin" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}
-                    >
-                      {u.role === "admin" ? "مدير نظام" : "كاشير"}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {isMasterAdmin ? (
-                        <>
+            <tbody>
+              {users.map((u) => {
+                const isMasterAdmin = u.username === MASTER_ADMIN_USERNAME;
+                const isMe = u.id === currentUser?.id;
+                const canChangePass =
+                  !isMasterAdmin ||
+                  (isMasterAdmin &&
+                    currentUser?.username === MASTER_ADMIN_USERNAME);
+
+                return (
+                  <tr
+                    key={u.id}
+                    className="border-b border-slate-50 hover:bg-orange-50/20 transition-colors group"
+                  >
+                    <td className="p-5 font-bold text-slate-700">{u.name}</td>
+                    <td className="p-5">
+                      <span className="text-slate-800 font-mono text-xs bg-slate-100 w-fit px-2 py-0.5 rounded">
+                        {u.username}
+                      </span>
+                    </td>
+                    <td className="p-5 text-center">
+                      <span
+                        className={`px-4 py-1.5 rounded-xl text-[10px] font-black ${u.role === "admin" ? "bg-orange-100 text-orange-600" : "bg-emerald-100 text-emerald-600"}`}
+                      >
+                        {u.role === "admin" ? "ADMIN" : "CASHIER"}
+                      </span>
+                    </td>
+                    <td className="p-5">
+                      <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {canChangePass && (
                           <button
                             onClick={() => setViewingUser(u)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                            title="تغيير كلمة المرور"
                           >
-                            <Eye size={18} />
+                            <Key size={20} />
                           </button>
-                          {u.id !== currentUser?.id && (
-                            <button
-                              onClick={() => setUserToDelete(u)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="text-muted-foreground/60 flex items-center gap-1 text-xs">
-                          <Lock size={12} /> محمي
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        )}
+                        {!isMasterAdmin && !isMe && (
+                          <button
+                            onClick={() => setUserToDelete(u)} // فتح المودال بدلاً من الـ alert
+                            className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                            title="حذف الموظف"
+                          >
+                            <Trash2 size={20} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal عرض وإعادة تعيين كلمة السر */}
+      {/* Pop Alert المخصص للحذف */}
       <AnimatePresence>
-        {viewingUser && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        {userToDelete && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[110] p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-card p-6 rounded-2xl max-w-sm w-full border shadow-2xl relative text-right"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full shadow-2xl text-center border border-white/20"
             >
-              <button
-                onClick={() => {
-                  setViewingUser(null);
-                  setNewPassword("");
-                }}
-                className="absolute top-4 left-4 text-muted-foreground hover:text-foreground"
-              >
-                <X size={20} />
-              </button>
-
-              <div className="flex items-center gap-3 mb-6 border-b pb-4">
-                <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                  <Key size={22} />
-                </div>
-                <h3 className="text-xl font-bold">كلمة سر الموظف</h3>
+              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6">
+                <AlertTriangle size={40} strokeWidth={1.5} />
               </div>
+              <h2 className="text-xl font-black text-slate-800 mb-2">
+                تأكيد حذف الحساب
+              </h2>
+              <p className="text-slate-500 leading-relaxed mb-8">
+                هل أنتِ متأكدة من حذف الموظف{" "}
+                <span className="text-red-600 font-bold">
+                  {userToDelete.name}
+                </span>
+                ؟
+                <br />{" "}
+                <span className="text-xs">لا يمكن التراجع عن هذا الإجراء.</span>
+              </p>
 
-              <div>
-                <label className="text-xs text-muted-foreground mb-2 block">
-                  إعادة تعيين (Reset) كلمة سر جديدة:
-                </label>
-                <Input
-                  type="password"
-                  placeholder="اكتب الكلمة الجديدة هنا..."
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="text-center font-mono"
-                  dir="ltr"
-                />
-
-                {/* عرض شروط الباسوورد في الـ Modal */}
-                <PasswordRules password={newPassword} />
-
+              <div className="flex gap-3">
                 <Button
-                  onClick={handleResetPassword}
-                  disabled={isUpdating}
-                  className="w-full mt-4 bg-orange-600 hover:bg-orange-700 text-white gap-2"
+                  onClick={confirmDelete}
+                  disabled={isDeletingProcess}
+                  className="flex-1 h-14 bg-red-500 hover:bg-red-600 text-white font-bold rounded-2xl shadow-lg shadow-red-100 transition-all active:scale-95"
                 >
-                  {isUpdating ? (
-                    <RefreshCw className="animate-spin" size={16} />
+                  {isDeletingProcess ? (
+                    <RefreshCw className="animate-spin" />
                   ) : (
-                    <RefreshCw size={16} />
+                    "نعم، حذف"
                   )}
-                  تحديث كلمة السر
+                </Button>
+                <Button
+                  onClick={() => setUserToDelete(null)}
+                  disabled={isDeletingProcess}
+                  className="flex-1 h-14 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
+                >
+                  تراجع
                 </Button>
               </div>
             </motion.div>
@@ -351,39 +427,65 @@ const UsersPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Modal تأكيد الحذف */}
+      {/* مودال تغيير كلمة المرور */}
       <AnimatePresence>
-        {userToDelete && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        {viewingUser && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="bg-card p-6 rounded-2xl max-w-sm w-full text-center border shadow-2xl"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white p-10 rounded-[3rem] max-w-md w-full shadow-2xl relative"
             >
-              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle size={32} />
+              <div className="flex flex-col items-center text-center mb-8">
+                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 mb-4">
+                  <LockIcon size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-800">
+                  تحديث الأمان
+                </h2>
+                <p className="text-slate-400 mt-1">
+                  تغيير باسوورد:{" "}
+                  <span className="text-orange-600 font-bold">
+                    {viewingUser.name}
+                  </span>
+                </p>
               </div>
-              <h3 className="text-xl font-bold mb-2 text-foreground">
-                تأكيد الحذف
-              </h3>
-              <p className="text-muted-foreground text-sm mb-6">
-                هل تريد حذف الموظف ({userToDelete.name})؟
-              </p>
-              <div className="flex gap-3">
+
+              <div className="space-y-4">
+                <Input
+                  type="password"
+                  placeholder="كلمة المرور الجديدة"
+                  className="h-16 rounded-2xl text-center text-xl border-slate-100 bg-slate-50 focus:bg-white transition-all shadow-inner"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                />
+
+                <div className="bg-slate-50 p-4 rounded-2xl">
+                  <PasswordRules checks={currentPassChecks} />
+                </div>
+
                 <Button
-                  onClick={confirmDelete}
-                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  onClick={handleUpdatePass}
+                  disabled={isUpdating || !isPassValid}
+                  className="w-full h-16 bg-orange-500 hover:bg-orange-600 text-white text-xl font-black rounded-2xl shadow-lg shadow-orange-200 disabled:grayscale transition-all"
                 >
-                  نعم، احذف
+                  {isUpdating ? (
+                    <RefreshCw className="animate-spin ml-2" />
+                  ) : (
+                    "تحديث كلمة السر"
+                  )}
                 </Button>
-                <Button
-                  onClick={() => setUserToDelete(null)}
-                  variant="outline"
-                  className="flex-1"
+
+                <button
+                  onClick={() => {
+                    setViewingUser(null);
+                    setNewPass("");
+                  }}
+                  className="w-full text-slate-400 hover:text-slate-600 font-bold text-sm"
                 >
-                  إلغاء
-                </Button>
+                  إلغاء وإغلاق
+                </button>
               </div>
             </motion.div>
           </div>

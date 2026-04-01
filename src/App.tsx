@@ -14,7 +14,7 @@ import ReportsPage from "./pages/ReportsPage";
 import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import QuotationsPage from "./pages/QuotationsPage"; // استيراد صفحة عروض الأسعار
+import QuotationsPage from "./pages/QuotationsPage";
 
 const queryClient = new QueryClient();
 
@@ -26,14 +26,16 @@ const ProtectedRoute = ({
   adminOnly?: boolean;
 }) => {
   const { isAuthenticated, user } = useAuth();
+
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (adminOnly && user?.role !== "admin")
     return <Navigate to="/pos" replace />;
+
   return <>{children}</>;
 };
 
 const AppRoutes = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Routes>
@@ -51,8 +53,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* مسار عروض الأسعار (متاح للأدمن والكاشير) */}
       <Route
         path="/quotations"
         element={
@@ -61,7 +61,14 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
+      <Route
+        path="/customers"
+        element={
+          <ProtectedRoute>
+            <CustomersPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard"
         element={
@@ -75,14 +82,6 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute adminOnly>
             <InventoryPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/customers"
-        element={
-          <ProtectedRoute>
-            <CustomersPage />
           </ProtectedRoute>
         }
       />
@@ -110,7 +109,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
       <Route path="/" element={<Navigate to="/pos" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -121,21 +119,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner
-        position="top-center"
-        richColors
-        closeButton
-        theme="light"
-        toastOptions={{
-          style: {
-            padding: "16px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            border: "2px solid transparent",
-          },
-          className: "sonner-toast-custom",
-        }}
-      />
+      <Sonner position="top-center" richColors closeButton theme="light" />
       <AuthProvider>
         <POSProvider>
           <BrowserRouter>
