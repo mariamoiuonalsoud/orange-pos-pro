@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import { Receipt } from "./Receipt";
 
-const CartPanel = () => {
+const CartPanel: React.FC = () => {
   const {
     cart,
     updateQuantity,
@@ -29,7 +29,6 @@ const CartPanel = () => {
     completeSale,
     saveQuotation,
     findCustomerByPhone,
-    // استدعاء بيانات التحويل من الـ Context
     tempCustomer,
     cartDiscount,
     setTempCustomer,
@@ -39,16 +38,16 @@ const CartPanel = () => {
   const { user } = useAuth();
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [showCheckout, setShowCheckout] = useState<boolean>(false);
+  const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [currentSale, setCurrentSale] = useState<SaleWithCustomer | null>(null);
 
-  const [phone, setPhone] = useState("");
-  const [customerName, setCustomerName] = useState("");
+  const [phone, setPhone] = useState<string>("");
+  const [customerName, setCustomerName] = useState<string>("");
   const [discount, setDiscount] = useState<string>("0");
-  const [showCashInput, setShowCashInput] = useState(false);
-  const [cashReceived, setCashReceived] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [showCashInput, setShowCashInput] = useState<boolean>(false);
+  const [cashReceived, setCashReceived] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // --- التأثير التلقائي: ملء بيانات العميل والخصم عند التحويل من عرض سعر ---
   useEffect(() => {
@@ -56,16 +55,14 @@ const CartPanel = () => {
       setPhone(tempCustomer.phone);
       setCustomerName(tempCustomer.name);
       setDiscount(cartDiscount.toString());
-      setShowCheckout(true); // فتح واجهة الدفع تلقائياً
+      setShowCheckout(true);
       toast.info("تم استيراد بيانات العميل والخصم من عرض السعر");
     }
   }, [tempCustomer, cartDiscount]);
 
-  // الحسابات المالية (VAT 15%)
+  // الحسابات المالية (تم حذف القيمة المضافة نهائياً)
   const discountVal = Math.max(0, parseFloat(discount) || 0);
-  const amountAfterDiscount = Math.max(0, cartTotal - discountVal);
-  const vatAmount = amountAfterDiscount * 0.15;
-  const grandTotal = amountAfterDiscount + vatAmount;
+  const grandTotal = Math.max(0, cartTotal - discountVal); // الإجمالي هو الصافي بعد الخصم فقط
   const changeDue = (parseFloat(cashReceived) || 0) - grandTotal;
 
   const handlePrint = useReactToPrint({
@@ -96,31 +93,38 @@ const CartPanel = () => {
       toast.error("برجاء إدخال بيانات العميل أولاً");
       return;
     }
+
     if (
       method === "cash" &&
-      (!showCashInput || parseFloat(cashReceived) < grandTotal)
+      (!showCashInput || (parseFloat(cashReceived) || 0) < grandTotal)
     ) {
       setShowCashInput(true);
       return;
     }
 
     setIsProcessing(true);
-    const sale = await completeSale(
-      method,
-      user?.id || "admin",
-      phone,
-      customerName,
-      parseFloat(cashReceived) || grandTotal,
-      changeDue > 0 ? changeDue : 0,
-      discountVal,
-    );
+    try {
+      const sale = await completeSale(
+        method,
+        user?.id || "admin",
+        phone,
+        customerName,
+        parseFloat(cashReceived) || grandTotal,
+        changeDue > 0 ? changeDue : 0,
+        discountVal,
+      );
 
-    if (sale) {
-      setCurrentSale(sale);
-      setShowSuccess(true);
-      resetForm();
+      if (sale) {
+        setCurrentSale(sale);
+        setShowSuccess(true);
+        resetForm();
+      }
+    } catch (error) {
+      toast.error("حدث خطأ أثناء إتمام العملية");
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
   };
 
   const handleSaveQuotation = async () => {
@@ -146,9 +150,9 @@ const CartPanel = () => {
     setCustomerName("");
     setCashReceived("");
     setDiscount("0");
-    // تنظيف البيانات المؤقتة في الـ Context
     setTempCustomer({ name: "", phone: "" });
     setCartDiscount(0);
+    clearCart(); // تنظيف السلة بعد النجاح
   };
 
   return (
@@ -185,7 +189,7 @@ const CartPanel = () => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold truncate">{item.name}</p>
               <p className="text-primary font-bold text-xs">
-                {item.price.toFixed(2)} ج.م
+                {(item.price * item.quantity).toFixed(2)} ج.م
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -227,12 +231,12 @@ const CartPanel = () => {
 
           <div className="space-y-2 text-sm font-bold">
             <div className="flex justify-between text-muted-foreground font-medium">
-              <span>المجموع الفرعي</span>
+              <span>المجموع</span>
               <span>{cartTotal.toFixed(2)} ج.م</span>
             </div>
             {discountVal > 0 && (
               <div className="flex justify-between text-destructive">
-                <span>قيمة الخصم</span>
+                <span>خصم إضافي</span>
                 <span>-{discountVal.toFixed(2)} ج.م</span>
               </div>
             )}
@@ -263,7 +267,9 @@ const CartPanel = () => {
                   <Input
                     placeholder="اسم العميل"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setCustomerName(e.target.value)
+                    }
                     className="h-11"
                   />
                   <div className="grid grid-cols-2 gap-2 mt-2">
@@ -313,7 +319,9 @@ const CartPanel = () => {
                     type="number"
                     placeholder="المبلغ المستلم..."
                     value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setCashReceived(e.target.value)
+                    }
                     className="h-14 text-center text-2xl font-bold border-2 border-green-500"
                     autoFocus
                   />
@@ -379,6 +387,7 @@ const CartPanel = () => {
         )}
       </AnimatePresence>
 
+      {/* نسخة مخفية للطباعة */}
       <div style={{ display: "none" }}>
         <Receipt ref={receiptRef} sale={currentSale} />
       </div>

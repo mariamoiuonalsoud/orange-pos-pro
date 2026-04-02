@@ -15,7 +15,6 @@ type SaleWithDBFields = SaleWithCustomer & {
   change_due?: number;
   discount_amount?: number;
   total_amount?: number;
-  vat_amount?: number;
 };
 
 export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
@@ -34,12 +33,8 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
     const changeDue = sale.changeDue || rawSale.change_due || 0;
     const discount = sale.discountAmount || rawSale.discount_amount || 0;
     const finalTotal = sale.total || rawSale.total_amount || 0;
-    const vatAmount =
-      sale.vatAmount !== undefined ? sale.vatAmount : rawSale.vat_amount;
 
-    const tax =
-      vatAmount !== undefined ? vatAmount : finalTotal - finalTotal / 1.15;
-    const amountAfterDiscount = finalTotal - tax;
+    const amountAfterDiscount = finalTotal;
     const subtotalBeforeDiscount = amountAfterDiscount + discount;
 
     return (
@@ -115,10 +110,7 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
               <span>-{discount.toFixed(2)} ج.م</span>
             </div>
           )}
-          <div className="flex justify-between text-[11px]">
-            <span>ضريبة القيمة المضافة (15%):</span>
-            <span>{tax.toFixed(2)} ج.م</span>
-          </div>
+
           <div className="flex justify-between font-bold text-base border-t border-black pt-1 mt-1">
             <span>الإجمالي النهائي:</span>
             <span>{finalTotal.toFixed(2)} ج.م</span>

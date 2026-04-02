@@ -40,8 +40,8 @@ export const QuotationReceipt = React.forwardRef<
 
   const discount = quote.discount_amount || 0;
   const totalAfterDiscount = Math.max(0, subtotal - discount);
-  const vat = totalAfterDiscount * 0.15;
-  const grandTotal = totalAfterDiscount + vat;
+
+  const grandTotal = totalAfterDiscount;
 
   return (
     <div
@@ -118,11 +118,6 @@ export const QuotationReceipt = React.forwardRef<
         <div className="flex justify-between font-bold border-t pt-1 border-gray-200">
           <span>الصافي بعد الخصم:</span>
           <span>{totalAfterDiscount.toFixed(2)} ج.م</span>
-        </div>
-
-        <div className="flex justify-between text-blue-700">
-          <span>القيمة المضافة (15%):</span>
-          <span>{vat.toFixed(2)} ج.م</span>
         </div>
 
         <div className="flex justify-between text-[15px] font-black border-t-2 border-double border-black pt-2 mt-2">
