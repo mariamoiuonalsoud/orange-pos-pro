@@ -236,10 +236,6 @@ const CartPanel = () => {
                 <span>-{discountVal.toFixed(2)} ج.م</span>
               </div>
             )}
-            <div className="flex justify-between text-blue-600 border-t border-dashed pt-1">
-              <span>القيمة المضافة (15%)</span>
-              <span>+{vatAmount.toFixed(2)} ج.م</span>
-            </div>
             <div className="flex justify-between text-xl font-black border-t pt-2 text-primary">
               <span>الإجمالي النهائي</span>
               <span>{grandTotal.toFixed(2)} ج.م</span>
