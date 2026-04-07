@@ -30,16 +30,30 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
   ({ sale, cashierName }, ref) => {
     if (!sale || !sale.items) return null;
 
-    const tax = sale.total - sale.total / 1.15;
-    const subtotal = sale.total / 1.15;
+    // منطق حساب الإجمالي الحقيقي (بدون ضريبة) بناءً على حالة التخزين
+    const calculatePureTotal = (): number => {
+      const itemsSum = sale.items.reduce(
+        (acc, item) => acc + item.price * item.quantity,
+        0,
+      );
+
+      // إذا كان الإجمالي المخزن أكبر من مجموع العناصر (يعني متخزن بضريبة 15%)
+      // نستخدم 1.14 كحد أمان للفرق البرمجي
+      if (sale.total > itemsSum * 1.05) {
+        return sale.total / 1.15;
+      }
+
+      // لو متخزن أصلاً بدون ضريبة، نرجع الإجمالي المخزن كما هو
+      return sale.total;
+    };
+
+    const finalTotal = calculatePureTotal();
 
     return (
       <div
         ref={ref}
-        // تم إضافة كلاس report-print-area هنا
         className="p-6 bg-white text-black font-mono text-[12px] report-print-area"
         dir="rtl"
-        // السماح بالتمدد التلقائي
         style={{ width: "80mm", minHeight: "100%", height: "max-content" }}
       >
         <div className="text-center border-b border-black pb-2 mb-3">
@@ -87,7 +101,7 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           )}
         </div>
 
-        <table className="w-full mb-3 border-b border-black text-[11px]">
+        <table className="w-full border-b border-black text-[11px]">
           <thead>
             <tr className="border-b border-dashed border-black font-bold">
               <td className="py-1">الصنف</td>
@@ -96,7 +110,7 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
             </tr>
           </thead>
           <tbody>
-            {sale.items.map((item) => (
+            {sale.items.map((item: SaleItem) => (
               <tr key={item.id} className="align-top">
                 <td className="py-1 max-w-[30mm] break-words">{item.name}</td>
                 <td className="text-center">x{item.quantity}</td>
@@ -110,18 +124,10 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           </tbody>
         </table>
 
-        <div className="text-[12px] space-y-1 mb-4">
-          <div className="flex justify-between">
-            <span>المجموع النهائي:</span>
-            <span>{subtotal.toFixed(2)} ج.م</span>
-          </div>
-          <div className="flex justify-between">
-            <span>الضريبة (15%):</span>
-            <span>{tax.toFixed(2)} ج.م</span>
-          </div>
+        <div className="text-[12px] space-y-1 mb-3">
           <div className="flex justify-between font-bold text-sm border-t border-black pt-1">
-            <span>الإجمالي (بعد المرتجع):</span>
-            <span>{sale.total.toFixed(2)} ج.م</span>
+            <span>الإجمالي النهائي:</span>
+            <span>{finalTotal.toFixed(2)} ج.م</span>
           </div>
         </div>
 
@@ -141,27 +147,13 @@ const ReceiptToPrint = forwardRef<HTMLDivElement, ReceiptProps>(
           </p>
         </div>
 
-        {/* --- تحديث ستايل الطباعة الديناميكي هنا --- */}
         <style type="text/css" media="print">
           {`
-            @page { 
-              size: 80mm auto; 
-              margin: 0 !important; 
-            }
+            @page { size: 80mm auto; margin: 0 !important; }
             @media print {
-              html, body {
-                width: 80mm !important; 
-                margin: 0 !important;
-                padding: 0 !important; 
-                height: auto !important;
-              }
-              .report-print-area {
-                page-break-inside: avoid !important;
-              }
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
+              html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; height: auto !important; }
+              .report-print-area { page-break-inside: avoid !important; }
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
           `}
         </style>
@@ -174,7 +166,7 @@ ReceiptToPrint.displayName = "ReceiptToPrint";
 type FilterType = "all" | "year" | "month" | "day";
 type ReportTab = "all_sales" | "returns";
 
-const ReportsPage = () => {
+const ReportsPage: React.FC = () => {
   const { sales, refundItem } = usePOS();
   const { user } = useAuth();
 
@@ -182,8 +174,8 @@ const ReportsPage = () => {
   const [saleToPrint, setSaleToPrint] = useState<SaleWithCustomer | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
-  const [receiptSearchQuery, setReceiptSearchQuery] = useState("");
+  const [customerSearchQuery, setCustomerSearchQuery] = useState<string>("");
+  const [receiptSearchQuery, setReceiptSearchQuery] = useState<string>("");
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
   const [dateFilterType, setDateFilterType] = useState<FilterType>("all");
@@ -201,13 +193,13 @@ const ReportsPage = () => {
     documentTitle: saleToPrint?.receiptNumber || "receipt",
   });
 
-  const triggerPrint = (sale: SaleWithCustomer) => {
+  const triggerPrint = (sale: SaleWithCustomer): void => {
     setSaleToPrint(sale);
     setTimeout(() => handlePrintAction(), 100);
   };
 
   const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
+    return sales.filter((sale: SaleWithCustomer) => {
       const matchCustomer =
         customerSearchQuery === "" ||
         (sale.customerName?.toLowerCase() || "").includes(
@@ -235,7 +227,6 @@ const ReportsPage = () => {
         if (dateFilterType === "month") matchDate = isSameMonth;
         if (dateFilterType === "day") matchDate = isSameDay;
       }
-
       return matchCustomer && matchReceipt && matchDate;
     });
   }, [
@@ -249,19 +240,20 @@ const ReportsPage = () => {
   const displayedSales = useMemo(() => {
     if (activeTab === "returns") {
       return filteredSales.filter(
-        (s) => s.status === "refunded" || s.status === "partially_refunded",
+        (s: SaleWithCustomer) =>
+          s.status === "refunded" || s.status === "partially_refunded",
       );
     }
     return filteredSales;
   }, [filteredSales, activeTab]);
 
-  const exportToCSV = () => {
+  const exportToCSV = (): void => {
     if (displayedSales.length === 0) {
       toast.error("لا توجد بيانات لتصديرها");
       return;
     }
 
-    const headers = [
+    const headers: string[] = [
       "رقم الفاتورة",
       "العميل",
       "الهاتف",
@@ -270,7 +262,7 @@ const ReportsPage = () => {
       "التاريخ",
       "الحالة",
     ];
-    const rows = displayedSales.map((sale) => [
+    const rows: string[][] = displayedSales.map((sale: SaleWithCustomer) => [
       sale.receiptNumber,
       sale.customerName || "عميل نقدي",
       sale.customerPhone || "-",
@@ -301,14 +293,13 @@ const ReportsPage = () => {
     document.body.removeChild(link);
   };
 
-  const openRefundModal = (sale: SaleWithCustomer) => {
+  const openRefundModal = (sale: SaleWithCustomer): void => {
     setSaleToRefund(sale);
     setRefundQuantities({});
   };
 
-  const handleItemRefund = async (item: SaleItem) => {
+  const handleItemRefund = async (item: SaleItem): Promise<void> => {
     if (!saleToRefund || !item.order_item_id) return;
-
     const qtyToReturn = refundQuantities[item.id] || 0;
     if (qtyToReturn <= 0) {
       toast.error("برجاء تحديد كمية صحيحة للاسترجاع");
@@ -325,15 +316,7 @@ const ReportsPage = () => {
   };
 
   useEffect(() => {
-    const keepFocus = () => {
-      if (
-        document.activeElement !== document.getElementById("customer-search") &&
-        receiptInputRef.current
-      ) {
-        receiptInputRef.current.focus();
-      }
-    };
-    keepFocus();
+    if (receiptInputRef.current) receiptInputRef.current.focus();
   }, []);
 
   return (
@@ -344,19 +327,16 @@ const ReportsPage = () => {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Receipt className="w-6 h-6 text-primary" /> التقارير والمراجعة
           </h1>
-
           <div className="flex items-center gap-3">
             <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg font-bold flex items-center gap-2">
               <Users className="w-4 h-4" />
               <span>{displayedSales.length} فاتورة</span>
             </div>
-
             <button
               onClick={exportToCSV}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
             >
-              <Download className="w-4 h-4" />
-              تصدير لـ Excel
+              <Download className="w-4 h-4" /> تصدير لـ Excel
             </button>
           </div>
         </div>
@@ -384,13 +364,13 @@ const ReportsPage = () => {
           </button>
         </div>
 
+        {/* --- فلاتر البحث --- */}
         <div className="bg-card p-5 rounded-xl border border-border shadow-sm space-y-4">
           <div className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-muted-foreground" />
               <span className="font-semibold text-sm">تصفية بالتاريخ:</span>
             </div>
-
             <select
               className="border rounded-md p-2 text-sm bg-background cursor-pointer focus:ring-2 focus:ring-primary/50 outline-none"
               value={dateFilterType}
@@ -439,7 +419,9 @@ const ReportsPage = () => {
                 id="customer-search"
                 placeholder="ابحث باسم العميل أو رقم الهاتف..."
                 value={customerSearchQuery}
-                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setCustomerSearchQuery(e.target.value)
+                }
                 className="pr-10 h-12 text-base rounded-xl border-primary/20 focus:border-primary"
               />
             </div>
@@ -447,15 +429,18 @@ const ReportsPage = () => {
               <BarcodeIcon className="absolute right-3 top-3.5 h-5 w-5 text-primary" />
               <Input
                 ref={receiptInputRef}
-                placeholder="مرر باركود الفاتورة هنا (أو ابحث برقمها)..."
+                placeholder="مرر باركود الفاتورة هنا..."
                 value={receiptSearchQuery}
-                onChange={(e) => setReceiptSearchQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setReceiptSearchQuery(e.target.value)
+                }
                 className="pr-10 h-12 text-base rounded-xl border-2 border-primary/50 focus:border-primary bg-primary/5 font-mono"
               />
             </div>
           </div>
         </div>
 
+        {/* --- جدول المبيعات --- */}
         <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
@@ -471,7 +456,7 @@ const ReportsPage = () => {
               </thead>
               <tbody>
                 {displayedSales.length > 0 ? (
-                  displayedSales.map((sale) => (
+                  displayedSales.map((sale: SaleWithCustomer) => (
                     <tr
                       key={sale.id}
                       className={`border-t border-border transition-colors ${
@@ -520,16 +505,14 @@ const ReportsPage = () => {
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => triggerPrint(sale)}
-                            className="inline-flex items-center justify-center p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
-                            title="طباعة الفاتورة"
+                            className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
                           {sale.status !== "refunded" && (
                             <button
                               onClick={() => openRefundModal(sale)}
-                              className="inline-flex items-center justify-center p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
-                              title="استرجاع منتجات"
+                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
                             >
                               <Undo2 className="w-4 h-4" />
                             </button>
@@ -544,7 +527,7 @@ const ReportsPage = () => {
                       colSpan={6}
                       className="p-8 text-center text-muted-foreground"
                     >
-                      لا توجد فواتير مطابقة للبحث أو التاريخ المختار
+                      لا توجد فواتير مطابقة
                     </td>
                   </tr>
                 )}
@@ -562,20 +545,17 @@ const ReportsPage = () => {
         />
       </div>
 
-      {/* --- نافذة (Modal) الاسترجاع الجزئي --- */}
+      {/* --- Modal الاسترجاع --- */}
       {saleToRefund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-background rounded-xl shadow-lg max-w-2xl w-full flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+          <div className="bg-background rounded-xl shadow-lg max-w-2xl w-full flex flex-col max-h-[90vh]">
             <div className="p-6 border-b flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold flex items-center gap-2 text-red-600">
                   <PackageMinus className="w-6 h-6" /> استرجاع منتجات
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  فاتورة رقم:{" "}
-                  <span className="font-mono font-bold">
-                    {saleToRefund.receiptNumber}
-                  </span>
+                <p className="text-sm text-muted-foreground">
+                  فاتورة رقم: {saleToRefund.receiptNumber}
                 </p>
               </div>
               <button
@@ -585,33 +565,26 @@ const ReportsPage = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <div className="p-6 overflow-y-auto">
               <table className="w-full text-right text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="p-3 font-bold">المنتج</th>
-                    <th className="p-3 font-bold text-center">السعر</th>
-                    <th className="p-3 font-bold text-center">مباع</th>
-                    <th className="p-3 font-bold text-center text-primary">
-                      متاح للإرجاع
-                    </th>
-                    <th className="p-3 font-bold text-center">حدد الكمية</th>
-                    <th className="p-3 font-bold text-center">إجراء</th>
+                    <th className="p-3">المنتج</th>
+                    <th className="p-3 text-center">مباع</th>
+                    <th className="p-3 text-center">متاح</th>
+                    <th className="p-3 text-center">الكمية</th>
+                    <th className="p-3 text-center">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {saleToRefund.items.map((item) => {
+                  {saleToRefund.items.map((item: SaleItem) => {
                     const availableToReturn =
                       item.quantity - (item.returned_quantity || 0);
-                    const isFullyReturned = availableToReturn <= 0;
-
                     return (
                       <tr key={item.id} className="border-t">
                         <td className="p-3 font-bold">{item.name}</td>
-                        <td className="p-3 text-center">{item.price} ج.م</td>
                         <td className="p-3 text-center">{item.quantity}</td>
-                        <td className="p-3 text-center font-bold text-primary">
+                        <td className="p-3 text-center text-primary font-bold">
                           {availableToReturn}
                         </td>
                         <td className="p-3 text-center">
@@ -619,27 +592,28 @@ const ReportsPage = () => {
                             type="number"
                             min="0"
                             max={availableToReturn}
-                            disabled={isFullyReturned}
                             value={refundQuantities[item.id] || 0}
-                            onChange={(e) => {
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>,
+                            ) => {
                               const val = parseInt(e.target.value) || 0;
-                              if (val <= availableToReturn && val >= 0) {
+                              if (val <= availableToReturn)
                                 setRefundQuantities((prev) => ({
                                   ...prev,
                                   [item.id]: val,
                                 }));
-                              }
                             }}
-                            className="w-20 text-center mx-auto h-8 border-primary/30"
+                            className="w-16 text-center h-8"
                           />
                         </td>
                         <td className="p-3 text-center">
                           <button
                             disabled={
-                              isFullyReturned || !refundQuantities[item.id]
+                              availableToReturn <= 0 ||
+                              !refundQuantities[item.id]
                             }
                             onClick={() => handleItemRefund(item)}
-                            className="bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                            className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs disabled:opacity-50"
                           >
                             إرجاع
                           </button>
