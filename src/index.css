@@ -1,7 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @layer base {
   :root {
     --background: 30 20% 97%;
@@ -84,6 +86,7 @@
   }
 
   html {
+    /* تفعيل اتجاه اليمين لليسر افتراضياً بناءً على طلبك */
     direction: rtl;
   }
 

@@ -99,14 +99,18 @@ const POSPage = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // التعديل هنا: البحث اليدوي أصبح برقم الباركود بدلاً من الاسم
+  // التعديل: البحث أصبح يشمل الاسم والباركود معاً
   const filteredProducts = products.filter((p) => {
     const matchCategory =
       selectedCategory === "all" || p.category === selectedCategory;
 
-    // تأمين الكود لو المنتج ملوش باركود، ومقارنة الباركود بنص البحث
-    const safeBarcode = p.barcode ? String(p.barcode) : "";
-    const matchSearch = safeBarcode.includes(searchQuery.trim());
+    const searchTerm = searchQuery.trim().toLowerCase();
+    const safeName = p.name.toLowerCase();
+    const safeBarcode = p.barcode ? String(p.barcode).toLowerCase() : "";
+
+    // البحث يطابق الاسم أو رقم الباركود
+    const matchSearch =
+      safeName.includes(searchTerm) || safeBarcode.includes(searchTerm);
 
     return matchCategory && matchSearch;
   });
@@ -122,7 +126,7 @@ const POSPage = () => {
               <Search className="absolute right-3 top-3 h-5 w-5 text-muted-foreground" />
               {/* التعديل هنا: تغيير النص الإرشادي ليتناسب مع البحث بالباركود */}
               <Input
-                placeholder="ابحث يدوياً برقم الباركود..."
+                placeholder="ابحث يدوياً بأسم المنتج أو برقم الباركود..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pr-10 h-12 text-base rounded-xl border-primary/20 focus:border-primary"

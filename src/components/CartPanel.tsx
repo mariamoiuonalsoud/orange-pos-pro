@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect } from "react";
 import { usePOS, SaleWithCustomer } from "@/contexts/POSContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,8 +13,8 @@ import {
   Banknote,
   CheckCircle,
   Printer,
-  FileText,
   Percent,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,55 +51,85 @@ const CartPanel: React.FC = () => {
   const [cashReceived, setCashReceived] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  // --- التأثير التلقائي: ملء بيانات العميل والخصم عند التحويل من عرض سعر ---
   useEffect(() => {
     if (tempCustomer.phone || tempCustomer.name) {
       setPhone(tempCustomer.phone);
       setCustomerName(tempCustomer.name);
       setDiscount(cartDiscount.toString());
       setShowCheckout(true);
-      toast.info("تم استيراد بيانات العميل والخصم من عرض السعر");
     }
   }, [tempCustomer, cartDiscount]);
 
-  // الحسابات المالية (تم حذف القيمة المضافة نهائياً)
   const discountVal = Math.max(0, parseFloat(discount) || 0);
-  const grandTotal = Math.max(0, cartTotal - discountVal); // الإجمالي هو الصافي بعد الخصم فقط
-  const changeDue = (parseFloat(cashReceived) || 0) - grandTotal;
+  const grandTotal = Math.max(0, cartTotal - discountVal);
+  const cashReceivedNum = parseFloat(cashReceived) || 0;
+  const changeDue = cashReceivedNum - grandTotal;
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: currentSale?.receiptNumber || "receipt",
   });
 
-  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDiscountChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
     const val = e.target.value;
-    if (parseFloat(val) < 0) {
-      setDiscount("0");
-    } else {
-      setDiscount(val);
-    }
+    setDiscount(parseFloat(val) < 0 ? "0" : val);
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const val = e.target.value;
     setPhone(val);
     if (val.length === 11) {
-      const c = findCustomerByPhone(val);
-      if (c) setCustomerName(c.name);
+      const customer = findCustomerByPhone(val);
+      if (customer) setCustomerName(customer.name);
     }
   };
 
-  const processSale = async (method: "cash" | "card" | "mobile") => {
-    if (!phone || !customerName || isProcessing) {
-      toast.error("برجاء إدخال بيانات العميل أولاً");
+  const resetForm = (): void => {
+    setShowCheckout(false);
+    setShowCashInput(false);
+    setPhone("");
+    setCustomerName("");
+    setCashReceived("");
+    setDiscount("0");
+    setTempCustomer({ name: "", phone: "" });
+    setCartDiscount(0);
+    clearCart();
+  };
+
+  const handleSaveQuotation = async (): Promise<void> => {
+    if (!phone || !customerName) {
+      toast.error("بيانات العميل مطلوبة لحفظ عرض السعر");
       return;
     }
+    setIsProcessing(true);
+    try {
+      const success = await saveQuotation(
+        user?.id || "admin",
+        phone,
+        customerName,
+        discountVal,
+      );
+      if (success) {
+        toast.success("تم حفظ عرض السعر بنجاح");
+        resetForm();
+      }
+    } catch (error: unknown) {
+      toast.error("حدث خطأ أثناء حفظ عرض السعر");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-    if (
-      method === "cash" &&
-      (!showCashInput || (parseFloat(cashReceived) || 0) < grandTotal)
-    ) {
+  const processSale = async (
+    method: "cash" | "card" | "mobile",
+  ): Promise<void> => {
+    if (!phone || !customerName || isProcessing) {
+      toast.error("برجاء إدخال بيانات العميل");
+      return;
+    }
+    if (method === "cash" && (!showCashInput || cashReceivedNum < grandTotal)) {
       setShowCashInput(true);
       return;
     }
@@ -109,61 +141,31 @@ const CartPanel: React.FC = () => {
         user?.id || "admin",
         phone,
         customerName,
-        parseFloat(cashReceived) || grandTotal,
+        cashReceivedNum || grandTotal,
         changeDue > 0 ? changeDue : 0,
         discountVal,
       );
-
       if (sale) {
         setCurrentSale(sale);
         setShowSuccess(true);
         resetForm();
       }
-    } catch (error) {
-      toast.error("حدث خطأ أثناء إتمام العملية");
-      console.error(error);
+    } catch (error: unknown) {
+      toast.error("حدث خطأ في العملية");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleSaveQuotation = async () => {
-    if (!phone || !customerName) {
-      toast.error("بيانات العميل مطلوبة لحفظ عرض السعر");
-      return;
-    }
-    setIsProcessing(true);
-    const success = await saveQuotation(
-      user?.id || "admin",
-      phone,
-      customerName,
-      discountVal,
-    );
-    if (success) resetForm();
-    setIsProcessing(false);
-  };
-
-  const resetForm = () => {
-    setShowCheckout(false);
-    setShowCashInput(false);
-    setPhone("");
-    setCustomerName("");
-    setCashReceived("");
-    setDiscount("0");
-    setTempCustomer({ name: "", phone: "" });
-    setCartDiscount(0);
-    clearCart(); // تنظيف السلة بعد النجاح
-  };
-
   return (
     <div
-      className="w-full lg:w-96 bg-card border-r border-border flex flex-col h-full shadow-2xl relative text-right"
+      className="w-full lg:w-96 bg-card border-l border-border flex flex-col h-fit shadow-2xl relative"
       dir="rtl"
     >
-      {/* الهيدر */}
-      <div className="p-4 border-b flex justify-between items-center bg-muted/20">
-        <h2 className="font-bold flex items-center gap-2 text-foreground">
-          <ShoppingBag className="w-5 h-5 text-primary" /> السلة
+      {/* 1. Header */}
+      <div className="p-4 border-b flex justify-between items-center bg-muted/20 shrink-0">
+        <h2 className="font-bold flex items-center gap-2 text-foreground font-cairo text-sm">
+          <ShoppingBag className="w-4 h-4 text-primary" /> سلة المشتريات
         </h2>
         {cart.length > 0 && (
           <button
@@ -171,214 +173,218 @@ const CartPanel: React.FC = () => {
               clearCart();
               resetForm();
             }}
-            className="text-xs text-destructive hover:underline"
+            className="text-[10px] text-destructive flex items-center gap-1 hover:underline"
           >
-            مسح الكل
+            <Trash2 size={12} /> مسح الكل
           </button>
         )}
       </div>
 
-      {/* قائمة المنتجات */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-        {cart.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-3 bg-muted/40 p-3 rounded-xl border border-border"
-          >
-            <span className="text-2xl">📦</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold truncate">{item.name}</p>
-              <p className="text-primary font-bold text-xs">
-                {(item.price * item.quantity).toFixed(2)} ج.م
-              </p>
+      {/* 2. Container WITHOUT scroll */}
+      <div className="bg-card/50">
+        <div className="p-4 space-y-3">
+          {cart.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 opacity-20">
+              <ShoppingBag size={40} className="mb-2" />
+              <p className="font-cairo text-xs">السلة فارغة</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                className="p-1 rounded-md bg-background hover:bg-muted transition-colors"
-              >
-                <Minus size={14} />
-              </button>
-              <span className="font-bold text-sm w-6 text-center">
-                {item.quantity}
-              </span>
-              <button
-                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                className="p-1 rounded-md bg-primary text-white hover:bg-orange-600 transition-colors"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* قسم الحسابات والإتمام */}
-      {cart.length > 0 && (
-        <div className="p-4 bg-muted/10 border-t space-y-3">
-          <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
-              <Percent size={16} /> الخصم (ج.م):
-            </div>
-            <Input
-              type="number"
-              min="0"
-              value={discount}
-              onChange={handleDiscountChange}
-              className="w-24 h-8 text-center font-bold bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-          </div>
-
-          <div className="space-y-2 text-sm font-bold">
-            <div className="flex justify-between text-muted-foreground font-medium">
-              <span>المجموع</span>
-              <span>{cartTotal.toFixed(2)} ج.م</span>
-            </div>
-            {discountVal > 0 && (
-              <div className="flex justify-between text-destructive">
-                <span>خصم إضافي</span>
-                <span>-{discountVal.toFixed(2)} ج.م</span>
-              </div>
-            )}
-            <div className="flex justify-between text-xl font-black border-t pt-2 text-primary">
-              <span>الإجمالي النهائي</span>
-              <span>{grandTotal.toFixed(2)} ج.م</span>
-            </div>
-          </div>
-
-          {!showCheckout ? (
-            <Button
-              onClick={() => setShowCheckout(true)}
-              className="w-full h-14 text-lg font-bold rounded-xl shadow-lg bg-primary hover:bg-orange-600 transition-all"
-            >
-              إتمام العملية
-            </Button>
           ) : (
-            <div className="space-y-3 p-4 bg-background rounded-2xl border-2 border-primary/20 shadow-xl">
-              {!showCashInput ? (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="رقم الموبايل"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    maxLength={11}
-                    className="h-11"
-                  />
-                  <Input
-                    placeholder="اسم العميل"
-                    value={customerName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setCustomerName(e.target.value)
-                    }
-                    className="h-11"
-                  />
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <Button
-                      onClick={handleSaveQuotation}
-                      disabled={isProcessing}
-                      variant="outline"
-                      className="border-primary text-primary h-11 gap-2 font-bold"
-                    >
-                      <FileText size={16} /> عرض سعر
-                    </Button>
-                    <Button
-                      onClick={() => setShowCheckout(false)}
-                      variant="secondary"
-                      className="h-11"
-                    >
-                      رجوع
-                    </Button>
+            <>
+              {/* Product List */}
+              {cart.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 bg-muted/40 p-3 rounded-xl border border-border group"
+                >
+                  <span className="text-xl">📦</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate font-cairo">
+                      {item.name}
+                    </p>
+                    <p className="text-primary font-bold text-[10px]">
+                      {(item.price * item.quantity).toFixed(2)} ج.م
+                    </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 pt-2">
-                    <Button
-                      onClick={() => processSale("cash")}
-                      className="bg-green-600 hover:bg-green-700 h-16 flex-col gap-1 text-[10px] font-bold text-white"
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      className="p-1 rounded-md bg-background hover:bg-muted border border-border"
                     >
-                      <Banknote size={20} /> نقداً
-                    </Button>
-                    <Button
-                      onClick={() => processSale("card")}
-                      className="bg-blue-600 hover:bg-blue-700 h-16 flex-col gap-1 text-[10px] font-bold text-white"
+                      <Minus size={12} />
+                    </button>
+                    <span className="font-bold text-xs w-4 text-center">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      className="p-1 rounded-md bg-primary text-white hover:bg-orange-600"
                     >
-                      <CreditCard size={20} /> بطاقة
-                    </Button>
-                    <Button
-                      onClick={() => processSale("mobile")}
-                      className="bg-slate-800 hover:bg-slate-900 h-16 flex-col gap-1 text-[10px] font-bold text-white"
-                    >
-                      <Smartphone size={20} /> محفظة
-                    </Button>
+                      <Plus size={12} />
+                    </button>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-4 py-2">
-                  <p className="text-center font-bold text-primary">
-                    المطلوب: {grandTotal.toFixed(2)} ج.م
-                  </p>
+              ))}
+
+              {/* 3. Footer Area */}
+              <div className="mt-6 pt-4 border-t border-dashed border-border space-y-4">
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-bold text-[11px] font-cairo">
+                    <Percent size={14} /> الخصم (ج.م):
+                  </div>
                   <Input
                     type="number"
-                    placeholder="المبلغ المستلم..."
-                    value={cashReceived}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setCashReceived(e.target.value)
-                    }
-                    className="h-14 text-center text-2xl font-bold border-2 border-green-500"
-                    autoFocus
+                    value={discount}
+                    onChange={handleDiscountChange}
+                    className="w-20 h-7 text-center font-bold text-xs bg-white dark:bg-slate-950"
                   />
-                  {changeDue >= 0 && (
-                    <div className="p-3 bg-green-600 text-white text-center rounded-xl font-black text-lg">
-                      الباقي: {changeDue.toFixed(2)} ج.م
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1 h-12"
-                      onClick={() => setShowCashInput(false)}
-                    >
-                      رجوع
-                    </Button>
-                    <Button
-                      disabled={isProcessing}
-                      className="flex-[2] bg-green-600 hover:bg-green-700 h-12 font-bold text-white"
-                      onClick={() => processSale("cash")}
-                    >
-                      تأكيد الدفع
-                    </Button>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-muted-foreground text-[11px] font-medium font-cairo">
+                    <span>المجموع الفرعي</span>
+                    <span>{cartTotal.toFixed(2)} ج.م</span>
+                  </div>
+                  <div className="flex justify-between text-base font-black border-t pt-2 text-primary font-cairo">
+                    <span>الإجمالي النهائي</span>
+                    <span>{grandTotal.toFixed(2)} ج.م</span>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="relative pb-4">
+                  {!showCheckout ? (
+                    <Button
+                      onClick={() => setShowCheckout(true)}
+                      className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-orange-600 shadow-md font-cairo transition-all"
+                    >
+                      إتمام العملية
+                    </Button>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-background rounded-xl border-2 border-primary/20 shadow-xl p-3 space-y-3"
+                    >
+                      {!showCashInput ? (
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="رقم الموبايل"
+                            value={phone}
+                            onChange={handlePhoneChange}
+                            maxLength={11}
+                            className="h-9 text-xs font-cairo"
+                          />
+                          <Input
+                            placeholder="اسم العميل"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            className="h-9 text-xs font-cairo"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              onClick={() => setShowCheckout(false)}
+                              variant="secondary"
+                              className="h-9 text-xs font-cairo"
+                            >
+                              رجوع
+                            </Button>
+                            <Button
+                              onClick={handleSaveQuotation}
+                              disabled={isProcessing}
+                              variant="outline"
+                              className="h-9 text-xs border-primary text-primary font-bold font-cairo"
+                            >
+                              عرض سعر
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1 pt-2 border-t">
+                            <Button
+                              onClick={() => processSale("cash")}
+                              className="bg-green-600 hover:bg-green-700 h-14 flex-col gap-1 text-[9px] text-white"
+                            >
+                              <Banknote size={18} /> نقداً
+                            </Button>
+                            <Button
+                              onClick={() => processSale("card")}
+                              className="bg-blue-600 hover:bg-blue-700 h-14 flex-col gap-1 text-[9px] text-white"
+                            >
+                              <CreditCard size={18} /> بطاقة
+                            </Button>
+                            <Button
+                              onClick={() => processSale("mobile")}
+                              className="bg-slate-800 hover:bg-slate-900 h-14 flex-col gap-1 text-[9px] text-white"
+                            >
+                              <Smartphone size={18} /> محفظة
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Input
+                            type="number"
+                            placeholder="المبلغ المستلم..."
+                            value={cashReceived}
+                            onChange={(e) => setCashReceived(e.target.value)}
+                            className="h-10 text-center text-lg font-bold border-2 border-green-500"
+                            autoFocus
+                          />
+                          {changeDue >= 0 && (
+                            <div className="p-2 bg-green-600 text-white text-center rounded-lg font-bold text-xs font-cairo">
+                              الباقي: {changeDue.toFixed(2)} ج.م
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              className="flex-1 h-9 text-xs font-cairo"
+                              onClick={() => setShowCashInput(false)}
+                            >
+                              رجوع
+                            </Button>
+                            <Button
+                              disabled={isProcessing}
+                              className="flex-[2] bg-green-600 h-9 text-xs font-bold text-white font-cairo"
+                              onClick={() => processSale("cash")}
+                            >
+                              تأكيد
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
-      )}
+      </div>
 
-      {/* مودال النجاح والطباعة */}
+      {/* Success Modal */}
       <AnimatePresence>
         {showSuccess && currentSale && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <motion.div
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              className="bg-card p-8 rounded-[2rem] max-w-sm w-full text-center shadow-2xl relative"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-card p-6 rounded-3xl max-w-xs w-full text-center shadow-2xl"
             >
-              <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-2xl font-black mb-1 text-foreground">
-                تمت العملية بنجاح!
+              <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
+              <h3 className="text-xl font-bold mb-1 font-cairo">
+                تمت العملية!
               </h3>
-              <p className="text-muted-foreground text-sm mb-6 font-mono">
+              <p className="text-muted-foreground text-[10px] mb-4 font-mono">
                 {currentSale.receiptNumber}
               </p>
               <Button
                 onClick={handlePrint}
-                className="w-full h-14 bg-primary text-white font-black text-xl gap-3 shadow-xl hover:bg-orange-600"
+                className="w-full h-12 bg-primary text-white font-bold gap-2 shadow-lg font-cairo"
               >
-                <Printer size={24} /> طباعة الفاتورة
+                <Printer size={20} /> طباعة الفاتورة
               </Button>
               <Button
                 variant="ghost"
                 onClick={() => setShowSuccess(false)}
-                className="w-full mt-2"
+                className="w-full mt-2 text-xs font-cairo"
               >
                 إغلاق
               </Button>
@@ -387,7 +393,6 @@ const CartPanel: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* نسخة مخفية للطباعة */}
       <div style={{ display: "none" }}>
         <Receipt ref={receiptRef} sale={currentSale} />
       </div>
